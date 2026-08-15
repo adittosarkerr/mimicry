@@ -2060,6 +2060,39 @@ export async function extractOutput(page: Page, opts: ExtractOptions): Promise<R
     }
   }
 
+  /* A list of places to stay with no prices on it is not a list of places to
+   * stay.
+   *
+   * Booking, asked for hotels in Cox's Bazar, served a page with no property
+   * cards on it at all. The structural scanner did what it is built to do —
+   * found the largest uniform repeated region — and returned eighty-eight
+   * results: "York United States", "Atlanta United States", "Chicago United
+   * States". Booking's own list of destinations, reported as a successful
+   * search for hotels.
+   *
+   * Deliberately only stays and flights. Those are sold, always, with the
+   * price on the listing — nobody lists a hotel without a nightly rate. A
+   * shop's product grid can honestly be terse: Walton lists "WIWH-GSN-45A"
+   * with no price until you open it, and refusing those would throw away real
+   * results to catch a rarer fault. */
+  const MUST_COST: ResultKind[] = ['stay', 'flight'];
+  if (
+    collected.length >= 5 &&
+    spec.resultKind &&
+    MUST_COST.includes(spec.resultKind) &&
+    !collected.some((item) => item.price)
+  ) {
+    return {
+      layout: spec.layout,
+      resultKind: spec.resultKind,
+      items: [],
+      finalUrl,
+      candidates,
+      emptyReason: `The site did not return its results for this search — the ${collected.length} blocks on the page carry no prices, so they are its own navigation rather than anything on offer. That is usually the site refusing an automated visit; try again, or run it with a visible browser.`,
+      summary: opts.summaryHint,
+    };
+  }
+
   const summaryBits = [opts.summaryHint, pagesRead > 1 ? `${pagesRead} pages` : undefined].filter(Boolean);
 
   /* The compiler's guess is made from the recording, before a single result
