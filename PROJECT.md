@@ -14,15 +14,31 @@ failed against a real site.
 │  (MV3, no      │            │  Express+Playwright  │ ◀──────── │  Next.js    │
 │   build step)  │            │                      │  values   │             │
 └────────────────┘            └──────────────────────┘           └─────────────┘
-                                        │
-                                        ▼
-                              ┌──────────────────────┐
-                              │  packages/schema     │  Zod — the shared contract
-                              └──────────────────────┘
+         │                              │       ▲                       │
+         │                              ▼       └───────────────────────┤
+         │                    ┌──────────────────────┐   the same       │
+         │                    │  packages/schema     │   engine, in a   │
+         │                    │  packages/core       │   function       │
+         │                    └──────────────────────┘                  │
+         └───────────────────── trace, when there is no runner ─────────┘
 ```
 
 Everything crossing a boundary is a Zod type in `packages/schema`. Change a shape there and both
 sides fail to compile, which is the point.
+
+**Nothing exists twice.** The runner was once the only thing that could do anything, which made a
+deployment without one a site of error messages. Rather than write a second implementation for that
+case, the parts were separated by what they actually need:
+
+| | Needs | Lives in | Reached by |
+|---|---|---|---|
+| Accounts, marketplace, billing, quota | a database | `packages/core` | both, over a `Store` |
+| Compiling, replaying, authoring | a browser | `apps/runner/src` | both, via `serverless.ts` |
+| Queue, websocket, live console | a process that stays up | `apps/runner/src/index.ts` | the runner alone |
+
+The web app asks the runner first for everything — it has no deadline and can stream — and does the
+work itself when there is no runner to ask. A serverless function gets its Chromium from
+`@sparticuz/chromium`; `replay/browser.ts` is the only file that knows which binary it is driving.
 
 ---
 

@@ -1,7 +1,6 @@
 import type { Automation, FormField } from '@mimic/schema';
 import { chatJson } from './deepseek';
 import { config } from './config';
-import { transcribeLocally } from './stt-local';
 
 /**
  * Voice → plan.
@@ -277,6 +276,16 @@ export async function transcribeAudio(
         'Speech-to-text is turned off (STT_LOCAL=0) and no STT_API_KEY is set. Type the request instead.',
       );
     }
+    /* Imported here rather than at the top of the file.
+     *
+     * Local Whisper runs on onnxruntime-node, which is 211MB of native
+     * binaries. A static import puts all of it in the dependency graph of
+     * anything that can reach this function — including the deployed site's
+     * voice routes, which pushed them past a serverless function's 250MB
+     * ceiling and failed the deployment outright. Nothing there can use it
+     * anyway: the model is downloaded per cold start into a filesystem that
+     * cannot keep it. */
+    const { transcribeLocally } = await import('./stt-local');
     return transcribeLocally(audio);
   }
 
