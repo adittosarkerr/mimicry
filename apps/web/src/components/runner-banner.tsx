@@ -1,37 +1,50 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { RUNNER_URL, runnerUnreachable } from '@/lib/api';
+import { api } from '@/lib/api';
 
 /**
- * Says what is unavailable, once, at the top of the page.
+ * Says what is missing, once, at the top of the page.
  *
- * Without this, a deployed site looks entirely healthy until you press
- * something, and then reports "Failed to fetch" — a message that names neither
- * what failed nor what to do.
+ * Without it, a site looks entirely healthy until you press something and then
+ * reports "Failed to fetch" — a message naming neither what failed nor what to
+ * do.
  *
- * Deliberately narrow now that the site answers for itself when there is no
- * runner: the library, the marketplace, the account and the payment sandbox
- * all work, and a banner saying everything is broken would be a lie that sends
- * people looking for a fault that isn't there. Only recording, running and
- * voice actually need the browser the runner has.
+ * It asks whichever backend is answering rather than the runner specifically.
+ * That distinction is the whole point now: a deployed site with no runner can
+ * still record, run and plan, so a banner announcing those as unavailable
+ * would send someone hunting for a fault that isn't there. What it reports is
+ * only what nothing available can do.
  */
 export function RunnerBanner() {
-  const [down, setDown] = useState(false);
+  const [missing, setMissing] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
-    /* One check, and only a real network failure counts. A 4xx or 5xx means
-       the runner answered — it is there, and whatever went wrong belongs in
-       the error of the thing that asked, not in a banner across every page. */
     const check = () =>
-      fetch(`${RUNNER_URL}/health`, { cache: 'no-store' })
-        .then(() => {
-          if (!cancelled) setDown(false);
+      api
+        .capabilities()
+        .then((it) => {
+          if (cancelled) return;
+
+          /* Nowhere to keep anything. Everything else is downstream of this,
+             so it is the only one worth a banner — the rest each say their own
+             piece where they are used. */
+          if (it.store === 'none') {
+            setMissing(
+              'This site has no database connected, so nothing can be saved — no accounts, no automations, no history. Set the three Supabase variables (see DEPLOYING.md) and redeploy.',
+            );
+            return;
+          }
+          setMissing(null);
         })
         .catch(() => {
-          if (!cancelled) setDown(true);
+          if (!cancelled) {
+            setMissing(
+              'Nothing is answering — neither this site nor a runner. If this is your own machine, start the runner with `npm run dev:runner`.',
+            );
+          }
         });
 
     void check();
@@ -45,15 +58,14 @@ export function RunnerBanner() {
     };
   }, []);
 
-  if (!down) return null;
+  if (!missing) return null;
 
   return (
     <div
       role="status"
       className="border-b border-amber-200 bg-amber-50 px-5 py-2.5 text-center text-[13px] leading-relaxed text-amber-900"
     >
-      <span className="font-semibold">Recording, running and voice are unavailable.</span>{' '}
-      {runnerUnreachable()}
+      {missing}
     </div>
   );
 }

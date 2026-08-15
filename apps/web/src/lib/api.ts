@@ -148,9 +148,14 @@ export const api = {
    * appears once they have already said their piece.
    */
   capabilities: () =>
-    request<{ ok: boolean; ai: string | false; stt: string | false; browser: boolean }>(
-      '/api/health',
-    ),
+    request<{
+      ok: boolean;
+      ai: string | false;
+      stt: string | false;
+      browser: boolean;
+      /** 'files' on a runner, 'supabase' on either, 'none' when unconfigured. */
+      store: 'files' | 'supabase' | 'none';
+    }>('/api/health'),
 
   listAutomations: (ownerId?: string) =>
     request<AutomationSummary[]>(`/api/automations${ownerId ? `?ownerId=${encodeURIComponent(ownerId)}` : ''}`),

@@ -73,6 +73,9 @@ export function VoiceStudio() {
   const [supported, setSupported] = useState(true);
   /** null while unknown; false when the runner has no transcription provider. */
   const [sttReady, setSttReady] = useState<boolean | null>(null);
+  /** Running against a runner on this machine, rather than a deployed site. */
+  const onOwnMachine =
+    typeof window !== 'undefined' && /localhost|127\.0\.0\.1/.test(window.location.host);
 
   const [events, setEvents] = useState<RunEvent[]>([]);
   const [status, setStatus] = useState<RunStatus>('queued');
@@ -483,14 +486,29 @@ export function VoiceStudio() {
         </p>
       )}
 
+      {/* Two different backends can be answering, and they run out of ways to
+          transcribe for different reasons — one has a local model switched
+          off, the other cannot have one at all. Naming the wrong fix is worse
+          than naming none, so this says which. */}
       {sttReady === false && !error && (
         <div className="mt-4 rounded-xl border border-sand-300 bg-white/60 px-4 py-3 text-[13px] leading-relaxed text-ink-500">
-          <span className="font-medium text-ink-800">Typing works right now.</span> Speech
-          transcription is switched off on the runner
-          (<code className="rounded bg-sand-100 px-1 font-mono text-[12px]">STT_LOCAL=0</code>).
-          Remove that to use the built-in model, or set{' '}
-          <code className="rounded bg-sand-100 px-1 font-mono text-[12px]">STT_API_KEY</code> to use
-          a hosted one.
+          <span className="font-medium text-ink-800">Typing works right now.</span>{' '}
+          {onOwnMachine ? (
+            <>
+              Speech transcription is switched off on the runner (
+              <code className="rounded bg-sand-100 px-1 font-mono text-[12px]">STT_LOCAL=0</code>).
+              Remove that to use the built-in model, or set{' '}
+              <code className="rounded bg-sand-100 px-1 font-mono text-[12px]">STT_API_KEY</code> to
+              use a hosted one.
+            </>
+          ) : (
+            <>
+              This site has no transcriber. The offline model needs a machine that can keep it
+              between requests, which a serverless function cannot — set{' '}
+              <code className="rounded bg-sand-100 px-1 font-mono text-[12px]">STT_API_KEY</code>{' '}
+              for a hosted one, or deploy the runner.
+            </>
+          )}
         </div>
       )}
 
