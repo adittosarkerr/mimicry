@@ -11,7 +11,7 @@ import {
   type Run,
   type UserProfile,
 } from '@mimic/schema';
-import { config } from './config.js';
+import { config, originAllowed } from './config.js';
 import { compileBaseline, compileTrace } from './compile/index.js';
 import { harvestFields } from './compile/harvest.js';
 import { runAutomation } from './replay/engine.js';
@@ -68,7 +68,7 @@ app.use(
   cors({
     origin: (origin, cb) => {
       // Extensions send no Origin; the web app sends a configured one.
-      if (!origin || config.corsOrigins.includes(origin) || /^chrome-extension:\/\//.test(origin)) {
+      if (!origin || originAllowed(origin) || /^chrome-extension:\/\//.test(origin)) {
         return cb(null, true);
       }
       return cb(null, false);
@@ -1318,8 +1318,8 @@ wss.on('connection', (socket, req) => {
   send({ type: 'ready', runId });
 });
 
-server.listen(config.port, () => {
-  console.log(`\n  Mimic runner  →  http://localhost:${config.port}`);
+server.listen(config.port, config.host, () => {
+  console.log(`\n  Mimic runner  →  http://localhost:${config.port} (bound ${config.host})`);
   console.log(`  AI compiler   →  ${config.deepseek.enabled ? config.deepseek.model : 'disabled (set DEEPSEEK_API_KEY)'}`);
   console.log(`  Browser       →  ${config.browser.headless ? 'headless' : 'headful'} chromium, max ${config.browser.maxConcurrency} concurrent`);
   console.log(`  Storage       →  ${config.storageDir}\n`);

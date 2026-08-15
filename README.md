@@ -160,6 +160,56 @@ See [`PROJECT.md`](PROJECT.md) for the architecture and [`PRD.md`](PRD.md) for t
 
 ---
 
+## Deploying
+
+Two halves, two homes. The web app is static-ish and goes anywhere; the runner
+needs a long-lived process and a real browser, so it cannot go on Vercel.
+
+### Web app → Vercel
+
+Import the repo. `vercel.json` at the root already sets the build:
+
+```json
+{ "buildCommand": "npm run build -w @mimic/web", "outputDirectory": "apps/web/.next" }
+```
+
+Leave **Root Directory** as the repository root — not `apps/runner`, which is a
+server and will fail to build. Then set the environment variables:
+
+| Variable | Value |
+|---|---|
+| `NEXT_PUBLIC_RUNNER_URL` | `https://your-runner.onrender.com` |
+| `NEXT_PUBLIC_RUNNER_WS` | `wss://your-runner.onrender.com` |
+| `NEXT_PUBLIC_SUPABASE_URL` / `_ANON_KEY` | from Supabase → Project Settings → API |
+
+### Runner → anywhere that runs containers
+
+`apps/runner/Dockerfile` builds on Playwright's own image, so Chromium and its
+system libraries are already correct and matched to the version in the code.
+
+**Render** — `render.yaml` is ready; point Render at the repo and it reads it.
+**Fly** — `fly.toml` is ready: `fly launch --no-deploy` then `fly deploy`.
+**Railway / anything else** — point it at `apps/runner/Dockerfile` with the repo
+root as the build context.
+
+Runner environment:
+
+| Variable | Value |
+|---|---|
+| `MIMIC_INGEST_TOKEN` | any secret string — the extension sends this |
+| `DEEPSEEK_API_KEY` | for voice, better forms, written answers |
+| `RUNNER_CORS` | `https://your-app.vercel.app,https://*.vercel.app` |
+| `RUNNER_STORAGE_DIR` | `/data/.mimic` — with a volume mounted at `/data` |
+
+`RUNNER_CORS` accepts a `*` wildcard for one label, which is how Vercel's
+per-deployment preview domains are covered without opening it to everything.
+
+**Give it real memory.** Chromium needs it — 2GB is comfortable, 512MB dies
+partway through a run. And mount a volume: without one, every restart loses the
+recordings, runs and receipts.
+
+---
+
 ## Payments
 
 The billing in this build is a **sandbox**. bKash, Nagad, Rocket, card and bank transfer all work

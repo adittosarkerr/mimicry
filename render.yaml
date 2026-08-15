@@ -1,0 +1,31 @@
+# Render deployment for the runner.
+#
+# The web app goes to Vercel; this is the half that needs a long-lived process
+# and a real browser, which Vercel cannot host.
+services:
+  - type: web
+    name: mimicry-runner
+    runtime: docker
+    dockerfilePath: ./apps/runner/Dockerfile
+    dockerContext: .
+    # Chromium wants memory. The free tier's 512MB will OOM mid-run.
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: MIMIC_INGEST_TOKEN
+        generateValue: true
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: RUNNER_CORS
+        # Your Vercel domain — comma-separated for previews.
+        sync: false
+      - key: RUNNER_HEADLESS
+        value: 'true'
+      - key: MIMIC_ENFORCE_QUOTA
+        value: '1'
+      - key: RUNNER_STORAGE_DIR
+        value: /data/.mimic
+    disk:
+      name: mimicry-data
+      mountPath: /data
+      sizeGB: 1

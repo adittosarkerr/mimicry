@@ -24,7 +24,13 @@ const int = (v: string | undefined, fallback: number) => {
 };
 
 export const config = {
-  port: int(process.env.RUNNER_PORT, 8787),
+  /* PORT is what every host assigns — Railway, Render, Fly, Heroku all inject
+     it and route to nothing else. RUNNER_PORT stays as the local override. */
+  port: int(process.env.RUNNER_PORT ?? process.env.PORT, 8787),
+  /* Container hosts route to the container's address, not to loopback. Binding
+     127.0.0.1 there produces a service that starts cleanly, passes its own
+     health check from inside, and is unreachable from the internet. */
+  host: process.env.RUNNER_HOST || '0.0.0.0',
   ingestToken: process.env.MIMIC_INGEST_TOKEN || 'dev-local-token-change-me',
 
   /**
@@ -103,5 +109,23 @@ export const config = {
     .map((s) => s.trim())
     .filter(Boolean),
 };
+
+/**
+ * Is this origin allowed to talk to the runner?
+ *
+ * Entries may use `*` as a wildcard for one label — `https://*.vercel.app`.
+ * Every Vercel preview deployment gets its own generated hostname, so a fixed
+ * list either misses them all or gets widened to everything; a wildcard that
+ * cannot cross a dot is the honest middle.
+ */
+export function originAllowed(origin: string): boolean {
+  return config.corsOrigins.some((pattern) => {
+    if (pattern === origin) return true;
+    if (!pattern.includes('*')) return false;
+
+    const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^./]+');
+    return new RegExp(`^${escaped}$`).test(origin);
+  });
+}
 
 export type Config = typeof config;

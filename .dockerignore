@@ -1,0 +1,13 @@
+node_modules
+**/node_modules
+.next
+**/.next
+.git
+.mimic
+**/.mimic
+apps/web
+extension
+suite-shots
+*.log
+.env
+.env.local

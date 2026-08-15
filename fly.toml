@@ -1,0 +1,36 @@
+# Fly.io deployment for the runner.
+app = "mimicry-runner"
+primary_region = "sin"   # closest to Bangladesh; change if you are elsewhere
+
+[build]
+  dockerfile = "apps/runner/Dockerfile"
+
+[env]
+  RUNNER_HEADLESS = "true"
+  MIMIC_ENFORCE_QUOTA = "1"
+  RUNNER_STORAGE_DIR = "/data/.mimic"
+  PORT = "8787"
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  # A cold start has to boot Chromium, so keep one machine warm.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.checks]
+    [[http_service.checks.health]]
+      path = "/health"
+      interval = "30s"
+      timeout = "5s"
+
+[[mounts]]
+  source = "mimicry_data"
+  destination = "/data"
+
+[[vm]]
+  # Chromium is memory-hungry; 512MB dies partway through a run.
+  memory = "2gb"
+  cpu_kind = "shared"
+  cpus = 2
