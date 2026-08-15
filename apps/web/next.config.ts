@@ -32,6 +32,27 @@ const nextConfig: NextConfig = {
    * bundler that inlines either produces a module that looks fine and cannot
    * find its own browser. */
   serverExternalPackages: ['playwright', 'playwright-core', '@sparticuz/chromium'],
+
+  /* Where tracing starts. Dependencies are hoisted to the workspace root, and
+     without this Next looks no further up than this app's own directory. */
+  outputFileTracingRoot: path.resolve(process.cwd(), '../..'),
+
+  /* Copied wholesale, because tracing cannot find these by reading the code.
+   *
+   * It follows imports and requires. It does not follow a JSON file read by
+   * path at run time, which is how playwright-core loads `browsers.json` — so
+   * the package deployed, and then failed on a file that was never a module:
+   *
+   *   Cannot find module '/var/task/node_modules/playwright-core/browsers.json'
+   *
+   * @sparticuz/chromium is the same shape of problem twice over: its whole
+   * point is a compressed browser binary sitting next to the code. */
+  outputFileTracingIncludes: {
+    '/api/**': [
+      '../../node_modules/playwright-core/**',
+      '../../node_modules/@sparticuz/chromium/**',
+    ],
+  },
   images: {
     // Scraped results link out to arbitrary sites, so remote images are
     // proxied rather than optimised against a fixed allowlist.
