@@ -35,11 +35,24 @@ show. Default page depth there is 3 rather than 10.
 **A function has no socket**, so the step-by-step console cannot stream. The run
 comes back whole, with every event, when it finishes.
 
-**Speech to text needs a hosted transcriber.** The runner falls back to a local
-Whisper model; nothing serverless can, because the model is hundreds of
-megabytes and the filesystem cannot keep it between calls. Chrome's own
-recogniser is tried first and usually works; set `STT_API_KEY` for the rest, or
-type the request instead.
+**Speech to text falls back to the browser.** The runner has an offline Whisper
+model; nothing serverless can, because the model is hundreds of megabytes and
+the filesystem cannot keep it between calls. So the microphone uses the
+browser's own recogniser there — free, no key, works in Chrome and Edge, and
+refused outright by Brave.
+
+For one that works in every browser, set `STT_API_KEY`. **Groq's free tier is
+the cheapest way to do it:**
+
+| Variable | Value |
+|---|---|
+| `STT_API_KEY` | your key from <https://console.groq.com/keys> |
+| `STT_BASE_URL` | `https://api.groq.com/openai/v1` |
+| `STT_MODEL` | `whisper-large-v3-turbo` |
+
+Any OpenAI-compatible `/audio/transcriptions` endpoint works the same way —
+OpenAI, Groq, or a whisper server of your own. Typing the request needs none of
+this and always works.
 
 ## Checklist
 

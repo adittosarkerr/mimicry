@@ -82,6 +82,8 @@ export function VoiceStudio() {
   const [run, setRun] = useState<Run | null>(null);
   const streamRef = useRef<RunStream | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  /** Did the browser's recogniser produce anything at all this time? */
+  const heardAnythingRef = useRef(false);
   const micRef = useRef<MicSession | null>(null);
   const meterRef = useRef<number | null>(null);
   /** Live input level and elapsed seconds, for the meter. */
@@ -128,16 +130,16 @@ export function VoiceStudio() {
   /* ── speech ─────────────────────────────────────────────────────────── */
 
   /**
-   * Always record and transcribe on the runner.
+   * The browser's own recogniser. Free, no key, and the only transcriber
+   * within reach of a deployment that has not been given one.
    *
-   * The browser's own Web Speech API looked like the cheaper option, but it is
-   * three different behaviours in three browsers: Brave rejects it outright,
-   * plain Chromium accepts it and silently returns nothing, and Chrome ships
-   * the audio to Google. One predictable path beats a fast path that works on
-   * someone else's machine — and the local model is private and offline.
+   * Used when the backend says it cannot transcribe. Every failure path here
+   * falls through to recording the audio instead, so a browser that refuses
+   * this (Brave) or accepts it and returns nothing (plain Chromium) still ends
+   * up somewhere that can explain itself.
    */
-  /** Retained for reference; no longer on the default path. */
   const startWebSpeech = useCallback(() => {
+    heardAnythingRef.current = false;
     const w = window as unknown as {
       SpeechRecognition?: new () => SpeechRecognitionLike;
       webkitSpeechRecognition?: new () => SpeechRecognitionLike;
@@ -162,6 +164,7 @@ export function VoiceStudio() {
         if (result.isFinal) finalText += text;
         else pending += text;
       }
+      if (finalText || pending) heardAnythingRef.current = true;
       if (finalText) setTranscript((prev) => `${prev} ${finalText}`.trim());
       setInterim(pending);
     };
@@ -182,6 +185,16 @@ export function VoiceStudio() {
 
     recognition.onend = () => {
       setInterim('');
+      /* Plain Chromium builds accept the API and then return nothing at all —
+         no error, no results, just a quiet end. Left alone that reads as "it
+         didn't hear me", which sends people to check their microphone. Ending
+         with nothing heard is treated as this recogniser not working, and the
+         audio path takes over. */
+      if (!heardAnythingRef.current) {
+        recognitionRef.current = null;
+        void startAudioCapture();
+        return;
+      }
       setStage((s) => (s === 'listening' ? 'idle' : s));
     };
 
@@ -264,13 +277,20 @@ export function VoiceStudio() {
   }, []);
 
   /**
-   * Always record and transcribe on the runner.
+   * Transcribe on the backend when it can, in the browser when it cannot.
    *
-   * The browser's own Web Speech API looked like the cheaper option, but it is
-   * three different behaviours in three browsers: Brave rejects it outright,
-   * plain Chromium accepts it and silently returns nothing, and Chrome ships
-   * the audio to Google. One predictable path beats a fast path that only works
-   * on someone else's machine — and the local model is private and offline.
+   * Recording and sending the audio is the better path and stays the default:
+   * the runner's Whisper is offline, private, and behaves the same in every
+   * browser. The Web Speech API is three behaviours in three browsers — Brave
+   * rejects it outright, plain Chromium accepts it and silently returns
+   * nothing, and Chrome ships the audio to Google.
+   *
+   * But "unreliable in some browsers" beats "impossible", and on a deployment
+   * with no transcriber configured that is the choice. A serverless function
+   * cannot hold a Whisper model between requests, so without a hosted API key
+   * the only transcriber within reach is the one already in the browser. It is
+   * tried first there, and falls through to recording if it fails — which
+   * produces the honest "no transcriber" message rather than silence.
    */
   const startListening = useCallback(() => {
     setError(null);
@@ -279,8 +299,10 @@ export function VoiceStudio() {
     setEvents([]);
     setTranscript('');
     setInterim('');
-    void startAudioCapture();
-  }, [startAudioCapture]);
+
+    if (sttReady === false) startWebSpeech();
+    else void startAudioCapture();
+  }, [sttReady, startWebSpeech, startAudioCapture]);
 
   const stopListening = useCallback(() => {
     recognitionRef.current?.stop();
@@ -503,10 +525,12 @@ export function VoiceStudio() {
             </>
           ) : (
             <>
-              This site has no transcriber. The offline model needs a machine that can keep it
-              between requests, which a serverless function cannot — set{' '}
+              Speech here uses your browser&rsquo;s own recogniser, which works in Chrome and Edge
+              and is refused by Brave. This site has no transcriber of its own — the offline model
+              needs a machine that keeps it between requests, which a serverless function cannot —
+              so set{' '}
               <code className="rounded bg-sand-100 px-1 font-mono text-[12px]">STT_API_KEY</code>{' '}
-              for a hosted one, or deploy the runner.
+              for one that works everywhere.
             </>
           )}
         </div>
