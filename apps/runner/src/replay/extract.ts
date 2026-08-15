@@ -1667,6 +1667,16 @@ export interface ExtractOptions {
   maxPages?: number;
   /** Progress reporting, so a long multi-page scrape isn't a silent wait. */
   onProgress?: (message: string, detail?: string) => void;
+  /**
+   * Wall-clock time by which this must stop, if there is one.
+   *
+   * Only serverless runs set it, and only because the alternative is being
+   * killed mid-page: the platform stops the function and the caller gets its
+   * error page, so the results already read are thrown away along with any
+   * explanation. Stopping a page early and reporting what was found beats
+   * both.
+   */
+  deadline?: number;
 }
 
 export async function extractOutput(page: Page, opts: ExtractOptions): Promise<RunOutput> {
@@ -1798,7 +1808,22 @@ export async function extractOutput(page: Page, opts: ExtractOptions): Promise<R
   let resultsUrl = page.url();
   let capturedResultsUrl = false;
 
+  /* How long is left, when anyone is counting. A page load plus a scrape is
+     the unit of work here, so there is no point starting one without room for
+     it — the platform would stop the function mid-page and the results already
+     read would go with it. */
+  const timeLeft = () => (opts.deadline ?? Number.POSITIVE_INFINITY) - Date.now();
+
   for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
+    if (pageIndex > 0 && timeLeft() < 12_000) {
+      opts.onProgress?.(
+        `Out of time for more pages — returning the ${collected.length} result${
+          collected.length === 1 ? '' : 's'
+        } already read`,
+      );
+      break;
+    }
+
     // A pager can lead somewhere that fails to load. Never scrape — or report —
     // a browser error page.
     const here = page.url();
@@ -1814,12 +1839,18 @@ export async function extractOutput(page: Page, opts: ExtractOptions): Promise<R
     /* Never scrape a page that hasn't rendered. An interstitial or an unpainted
        app shell reads as "the site returned nothing", which is both wrong and
        the hardest kind of wrong to diagnose. */
-    await waitForContent(page, pageIndex === 0 ? 30_000 : 10_000);
+    /* Never longer than there is. These waits are generous because waiting is
+       usually free — it only costs time when the page is not ready — but a
+       thirty-second wait inside a request with twenty seconds left spends all
+       of it and then gets killed anyway. */
+    const within = (ms: number) => Math.max(3_000, Math.min(ms, timeLeft() - 8_000));
+
+    await waitForContent(page, within(pageIndex === 0 ? 30_000 : 10_000));
     /* Generous on the first page, because this only costs time when the saved
        selector is not matching yet — which on a slow connection is exactly the
        case where waiting is the difference between the real results and
        whichever shelf the site painted first. */
-    await waitForItems(page, spec.itemLocator ?? null, pageIndex === 0 ? 30_000 : 8000);
+    await waitForItems(page, spec.itemLocator ?? null, within(pageIndex === 0 ? 30_000 : 8000));
 
     /* Says out loud which list is about to be read. When a run comes back with
        the wrong results, this line is the difference between "the saved
@@ -1855,7 +1886,7 @@ export async function extractOutput(page: Page, opts: ExtractOptions): Promise<R
     /* Only the first page earns the long endless-scroll budget. It is generous
        because that loop now stops the moment the item count stops rising —
        a static page still costs about a second. */
-    await primeLazyContent(page, pageIndex === 0 ? 25_000 : 6000, spec.itemLocator ?? null);
+    await primeLazyContent(page, within(pageIndex === 0 ? 25_000 : 6000), spec.itemLocator ?? null);
 
     await forceImagesToLoad(page);
 

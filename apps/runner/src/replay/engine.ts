@@ -37,6 +37,15 @@ export interface RunOptions {
   headless?: boolean;
   /** How many pages of results to walk before stopping. */
   maxPages?: number;
+  /**
+   * Wall-clock time by which the run must be finished, if there is one.
+   *
+   * Set only by callers that will be stopped whether they like it or not — a
+   * serverless function has a hard limit, and being killed mid-scrape returns
+   * the platform's error page instead of the results already read. Passed
+   * through to extraction, which is where the time actually goes.
+   */
+  deadline?: number;
 }
 
 /** Steps that are scaffolding, not intent. Failing them shouldn't kill a run. */
@@ -606,6 +615,7 @@ export async function runAutomation(opts: RunOptions): Promise<Run> {
       spec: automation.schema.output,
       summaryHint: summarize(automation, values),
       maxPages: opts.maxPages ?? 10,
+      deadline: opts.deadline,
       onProgress: (message, detail) =>
         emit({ phase: 'extract', message, detail, progress: 98 }),
     });

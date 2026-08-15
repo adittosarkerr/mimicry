@@ -78,9 +78,23 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
        inside the browser would otherwise be killed by the platform with no
        explanation at all. */
     const run = await Promise.race([
-      runAutomation({ automation, values, runId, userId, maxPages, headless: true }),
+      runAutomation({
+        automation,
+        values,
+        runId,
+        userId,
+        maxPages,
+        headless: true,
+        /* The engine stops itself and reports what it has. This is the number
+           that makes the difference between a partial answer and the
+           platform's error page. */
+        deadline: startedAt + runBudgetMs,
+      }),
+      /* Only for a hang the engine cannot notice — a page that never settles,
+         a socket that never closes. Fires before the platform's own limit so
+         the reply is still ours. */
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(OVER_BUDGET)), runBudgetMs + 5_000),
+        setTimeout(() => reject(new Error(OVER_BUDGET)), runBudgetMs + 4_000),
       ),
     ]);
 

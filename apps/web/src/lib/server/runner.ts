@@ -39,7 +39,7 @@ export {
  * budget a little under the platform's and told to come back with whatever it
  * has, which is a partial answer clearly labelled as one.
  */
-export const runBudgetMs = Number(process.env.MIMIC_RUN_BUDGET_MS ?? 55_000);
+export const runBudgetMs = Number(process.env.MIMIC_RUN_BUDGET_MS ?? 45_000);
 
 /** Long-form work is refused rather than started and killed. */
 export const OVER_BUDGET =
