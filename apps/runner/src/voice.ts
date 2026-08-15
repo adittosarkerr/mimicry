@@ -28,6 +28,114 @@ import { transcribeLocally } from './stt-local.js';
  * user actually has before it is rewritten — silently changing what someone
  * said is a worse failure than passing through a name we don't recognise.
  */
+/** How a letter comes back when somebody says it out loud. */
+const LETTER_WORDS: Record<string, string> = {
+  ay: 'a', aye: 'a', bee: 'b', be: 'b', cee: 'c', see: 'c', sea: 'c', dee: 'd',
+  ee: 'e', eff: 'f', ef: 'f', gee: 'g', aitch: 'h', haitch: 'h', eye: 'i', jay: 'j',
+  kay: 'k', el: 'l', ell: 'l', em: 'm', en: 'n', oh: 'o', owe: 'o', pee: 'p', pea: 'p',
+  cue: 'q', queue: 'q', ar: 'r', are: 'r', ess: 's', es: 's', tee: 't', tea: 't',
+  you: 'u', yew: 'u', vee: 'v', ex: 'x', why: 'y', wye: 'y', zee: 'z', zed: 'z',
+};
+
+/**
+ * Rebuilds a name that was spelled out loud.
+ *
+ * "F, M, O, V, I, E, S" comes back from transcription as anything from
+ * "f m o v i e s" to "eff em oh vee eye ee ess" — and "double s" means a
+ * repeated letter, not the word "double". Joined up, it is the name again.
+ */
+function joinSpelled(fragment: string): string {
+  const tokens = fragment
+    .toLowerCase()
+    .replace(/[.,\-–—]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+
+  let out = '';
+  for (let i = 0; i < tokens.length; i += 1) {
+    const token = tokens[i];
+
+    // "double s" → "ss", the way people actually spell aloud.
+    if ((token === 'double' || token === 'dubble') && i + 1 < tokens.length) {
+      const next = tokens[i + 1];
+      const letter = next.length === 1 ? next : LETTER_WORDS[next];
+      if (letter) {
+        out += letter + letter;
+        i += 1;
+        continue;
+      }
+    }
+
+    if (token.length === 1 && /[a-z0-9]/.test(token)) {
+      out += token;
+      continue;
+    }
+    if (LETTER_WORDS[token]) {
+      out += LETTER_WORDS[token];
+      continue;
+    }
+    // Anything that isn't a letter means this wasn't a spelling after all.
+    return '';
+  }
+
+  return out.length >= 3 ? out : '';
+}
+
+/**
+ * Removes a spelling aside, and uses it only when it helps.
+ *
+ * Spelling a site name out is what people do when the first attempt was
+ * misheard — and it backfires: "the spelling of fmovies is F-M-O-V-I-E-S"
+ * came back as "the spelling of fmovies is fmovidedoubleis.org", and the
+ * mangled version was the one that got used, because it looked more like a
+ * hostname than the correct name sitting right next to it.
+ *
+ * So the aside is stripped either way. Its letters are only adopted when they
+ * actually rebuild into a word and the original was never usable.
+ */
+export function resolveSpelling(transcript: string): string {
+  const TLD = 'com|net|org|io|ai|app|co|dev|xyz|info|tv|me|bd|in|uk';
+
+  const cleaned = transcript.replace(
+    // Everything after "is" belongs to the aside, up to "and …" or the end.
+    new RegExp(String.raw`\b(?:the\s+)?spell(?:ing|ed|s)?\s+(?:of\s+)?([a-z0-9][\w.-]*)\s+(?:is|as)\s+(.+?)(?:\s+and\s+(.*))?$`, 'gim'),
+    (_whole, subject: string, spelledRaw: string, rest: string | undefined) => {
+      const tail = rest ? ` and ${rest}` : '';
+
+      /* The suffix is dictated as "dot com" or written ".com", and either way
+         it is not part of the letters being spelled — leaving it in makes the
+         whole fragment unparseable as a spelling. */
+      const suffixMatch = spelledRaw.match(new RegExp(String.raw`(?:\.|\s+dot\s+)(${TLD})\s*[.!?]?\s*$`, 'i'));
+      const suffix = suffixMatch ? `.${suffixMatch[1].toLowerCase()}` : '';
+      const letters = (suffixMatch ? spelledRaw.slice(0, suffixMatch.index) : spelledRaw).replace(/[.!?]\s*$/, '');
+
+      const rebuilt = joinSpelled(letters);
+      const name = subject.replace(new RegExp(String.raw`\.(${TLD})$`, 'i'), '').toLowerCase();
+
+      /* They said the name plainly before spelling it. That version is the one
+         a person would trust, so keep it and drop the aside entirely — which
+         also removes the mangled hostname that would otherwise win. */
+      if (!rebuilt || rebuilt === name) {
+        /* The aside still earns its place when it supplied the ending: people
+           spell "w a l t o n b d dot com" precisely because the first attempt
+           had no suffix on it. */
+        const needsSuffix = suffix && !new RegExp(String.raw`\.(${TLD})$`, 'i').test(subject);
+        return needsSuffix ? `${name}${suffix}${tail}` : tail.trimStart();
+      }
+
+      // The letters rebuilt into something else — state it once, cleanly.
+      return `${rebuilt}${suffix}${tail}`;
+    },
+  );
+
+  return cleaned
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([.!?,])/g, '$1')
+    // "fmovies.org." then nothing — collapse the doubled stop the aside left.
+    .replace(/([.!?])[.!?]+/g, '$1')
+    .trim();
+}
+
 /**
  * Hostnames the person actually named.
  *

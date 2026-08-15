@@ -69,7 +69,15 @@ export const config = {
      */
     // base.en over tiny.en: noticeably better on real microphones and accents,
     // still around a second for a short request.
-    localModel: process.env.STT_LOCAL_MODEL || 'onnx-community/whisper-base.en',
+    /* `small.en` rather than `base.en`.
+     *
+     * Base is the weakest model that works at all, and it fails precisely where
+     * this product needs accuracy: proper nouns and spelled-out letters. It
+     * turned "F-M-O-V-I-E-S" into "fmovidedoubleis" and "gozayaan" into
+     * "gozion". Small is a larger one-off download (~250MB, cached) and a
+     * couple of seconds slower, which is a good trade against a request that
+     * goes to the wrong site. Override with STT_LOCAL_MODEL. */
+    localModel: process.env.STT_LOCAL_MODEL || 'onnx-community/whisper-small.en',
     get localEnabled() {
       return !bool(process.env.STT_LOCAL, true) ? false : true;
     },

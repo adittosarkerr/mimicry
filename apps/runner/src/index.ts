@@ -20,6 +20,7 @@ import { withSlot, activeRuns, queueDepth } from './queue.js';
 import {
   planFromTranscript,
   repairHostnames,
+  resolveSpelling,
   sameHost,
   sitesNamedIn,
   transcribeAudio,
@@ -571,7 +572,11 @@ app.post(
          it is just a site nobody has heard of. The user's own automations name
          the sites they talk about, so they are the correction key. */
       const sites = (await listAutomations().catch(() => [])).map((a) => a.site);
-      const transcript = repairHostnames(heard, sites);
+      /* Spelling asides first: somebody spelling a name out is correcting an
+         earlier mishearing, and the spelled version is itself mangled often
+         enough that it must not be allowed to win by looking more like a
+         hostname than the correct name beside it. */
+      const transcript = repairHostnames(resolveSpelling(heard), sites);
 
       res.json({ transcript, heard: transcript === heard ? undefined : heard });
     } catch (err) {
@@ -592,7 +597,10 @@ app.post(
     /* Repaired again here: the browser's own recogniser mangles site names too,
        and that path never touches the transcription route. */
     const transcript = spoken
-      ? repairHostnames(spoken, (await listAutomations().catch(() => [])).map((a) => a.site))
+      ? repairHostnames(
+          resolveSpelling(spoken),
+          (await listAutomations().catch(() => [])).map((a) => a.site),
+        )
       : '';
     if (!transcript) {
       res.status(400).json({ error: 'No transcript supplied.' });
