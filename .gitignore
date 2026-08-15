@@ -36,3 +36,7 @@ Thumbs.db
 # Local agent scratch
 .claude/settings.local.json
 scripts/_*
+
+# Build output when a Vercel project's Root Directory points here (see
+# apps/runner/vercel.json). Never committed.
+apps/runner/.next/

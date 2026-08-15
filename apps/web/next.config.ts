@@ -15,6 +15,13 @@ for (const file of ['.env.local', '.env']) {
 }
 
 const nextConfig: NextConfig = {
+  /* Where the build lands.
+   *
+   * Normally `.next` beside this config. A Vercel project whose Root Directory
+   * points at another workspace needs the output to appear inside that
+   * directory instead — Vercel collects the build from within its root and
+   * will not reach outside it. Set NEXT_DIST_DIR in that case. */
+  distDir: process.env.NEXT_DIST_DIR || '.next',
   reactStrictMode: true,
   // The shared schema package ships TypeScript source, not a build.
   transpilePackages: ['@mimic/schema'],
