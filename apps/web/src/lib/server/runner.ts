@@ -1,5 +1,3 @@
-import 'server-only';
-
 /**
  * The runner's own code, running inside this site's server.
  *
@@ -8,10 +6,14 @@ import 'server-only';
  * this, and the replay engine does not care which binary it drives. So rather
  * than a second implementation, the same engine runs here.
  *
- * Isolated behind this one module deliberately. It pulls in Playwright and a
- * 50MB browser, so anything importing it is committing that route to a heavy
- * cold start — and `server-only` makes an accidental import from a component a
- * build error rather than a mystery.
+ * Isolated behind this one module deliberately: it pulls in Playwright and a
+ * 67MB browser, so anything importing it is committing that route to a heavy
+ * cold start. Import it from route handlers only, never from a component.
+ *
+ * The `server-only` guard that would enforce that is deliberately absent — it
+ * is a package neither app declares, resolved here only because Next happens to
+ * alias it, and a build that depends on a dependency nobody listed is a build
+ * that breaks on somebody else's machine for no visible reason.
  */
 
 export {
