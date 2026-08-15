@@ -1866,7 +1866,12 @@ export async function extractOutput(page: Page, opts: ExtractOptions): Promise<R
          eleven suggestions and the real results — but only on the first page,
          only when a query is in the URL, and only when the saved selector is
          finding nothing at all. */
-      if (matched < 3 && pageIndex === 0 && page.url().includes('?')) {
+      /* Reloading costs a navigation and both waits again — around twenty
+         seconds on a slow browser. Starting one with less than that left is
+         how a run that had something to say ends as a timeout with nothing:
+         Booking spent 18s waiting for its cards, found too few, and began a
+         retry it could not finish. Better to read what is on the page. */
+      if (matched < 3 && pageIndex === 0 && page.url().includes('?') && timeLeft() > 22_000) {
         opts.onProgress?.('The page came back incomplete — loading it again');
         await page
           .goto(page.url(), { waitUntil: 'domcontentloaded', timeout: 30_000 })
