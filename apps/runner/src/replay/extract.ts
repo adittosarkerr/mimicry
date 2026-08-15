@@ -1734,7 +1734,29 @@ export async function extractOutput(page: Page, opts: ExtractOptions): Promise<R
       return null;
     });
 
-    if (document && document.wordCount >= 40) {
+    /* A results page is not the article you asked for.
+     *
+     * "Search Wikipedia for solar rooftop" ended on Special:Search and read
+     * 866 words of it as prose — a "document" titled "Search results", made of
+     * the site's own chrome, with twenty real results sitting on the page
+     * unread. Word count alone cannot tell those apart: a busy search page has
+     * plenty of words. What tells them apart is that one of them has a list on
+     * it and calls itself a search.
+     *
+     * Both conditions, because either alone is wrong: articles legitimately
+     * contain lists, and a page can be titled "Results" and still be prose. */
+    const stillOnResults =
+      Boolean(document) &&
+      /^\s*(search results?|results|search)\b/i.test(document!.title ?? '') &&
+      (await countBySelector(
+        page,
+        '[class*="search-result" i], [class*="searchresult" i], .mw-search-results > li, ' +
+          '[data-testid*="result" i], li[class*="result" i]',
+      )) >= 5;
+
+    if (stillOnResults) {
+      opts.onProgress?.('That is the site’s search results, not an article — reading it as a list');
+    } else if (document && document.wordCount >= 40) {
       opts.onProgress?.(
         `Read the article · ${document.wordCount.toLocaleString()} words in ${document.sections.length} section${
           document.sections.length === 1 ? '' : 's'
@@ -1752,7 +1774,7 @@ export async function extractOutput(page: Page, opts: ExtractOptions): Promise<R
     }
     /* Too thin to be the article — this is probably still a results list, so
        fall through and read it as one rather than returning an empty page. */
-    opts.onProgress?.('That page had no article on it — reading it as a list instead');
+    else opts.onProgress?.('That page had no article on it — reading it as a list instead');
   }
 
   // Confirmation-style runs don't have a list at all.
