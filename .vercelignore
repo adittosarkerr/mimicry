@@ -1,6 +1,13 @@
-# The runner is a long-lived Playwright server — it cannot run on Vercel, and
-# including it only gets it type-checked by a build that will never deploy it.
-apps/runner
+# `apps/runner` is NOT ignored, deliberately.
+#
+# It used to be: the runner is a long-lived Playwright server that cannot run on
+# Vercel, and including it only got it type-checked by a build that would never
+# deploy it. That stopped being true when the site started running automations
+# itself — the engine it runs is the runner's own, imported through
+# `apps/runner/src/serverless.ts`. Excluding the directory removes that file from
+# the build, and the build fails on an import it cannot resolve.
+
 extension
 scripts
 suite-shots
+supabase

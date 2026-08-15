@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
-  "installCommand": "cd ../.. && npm install",
+  "installCommand": "cd ../.. && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install",
   "buildCommand": "cd ../.. && NEXT_DIST_DIR=../runner/.next npm run build -w @mimic/web",
   "outputDirectory": ".next"
 }
