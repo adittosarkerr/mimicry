@@ -1,12 +1,26 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import {
+  createLibrary,
+  supabaseStoreFromEnv,
+  type Collection as CoreCollection,
+  type Store,
+} from '@mimic/core';
 import { config } from './config.js';
 import type { Automation, Run } from '@mimic/schema';
 
 /**
- * File-backed JSON store. Deliberately boring: one file per record, an index
- * kept in memory, atomic writes via rename. Swapping this for Postgres later
- * means reimplementing this module's exports, nothing else.
+ * Where records live.
+ *
+ * Two backends behind one set of functions. The file-backed one is the
+ * default and is deliberately boring: one file per record, atomic writes via
+ * rename, no server to run. It is the right thing on a laptop and the wrong
+ * thing everywhere else — Vercel's filesystem is read-only, and a container
+ * that redeploys without a volume forgets everything.
+ *
+ * So when Supabase credentials are present, the same functions read and write
+ * Postgres instead, and the deployed site and the runner see the same data.
+ * Nothing above this file knows which one it got.
  */
 
 const dirs = {
@@ -49,68 +63,89 @@ async function readJson<T>(file: string): Promise<T | null> {
   }
 }
 
-// ── automations ────────────────────────────────────────────────────────────
-export async function saveAutomation(a: Automation): Promise<Automation> {
-  await init();
-  await writeJson(path.join(dirs.automations, `${a.id}.json`), a);
-  return a;
-}
+const safeId = (id: string) => /^[\w-]+$/.test(id);
 
-export async function getAutomation(id: string): Promise<Automation | null> {
-  await init();
-  return readJson<Automation>(path.join(dirs.automations, `${id}.json`));
-}
+/** The folder-per-collection store. */
+const fileStore: Store = {
+  async get<T>(collection: CoreCollection, id: string): Promise<T | null> {
+    await init();
+    if (!safeId(id)) return null;
+    return readJson<T>(path.join(dirs[collection], `${id}.json`));
+  },
 
-export async function listAutomations(ownerId?: string): Promise<Automation[]> {
-  await init();
-  const files = await fs.readdir(dirs.automations).catch(() => [] as string[]);
-  const all = await Promise.all(
-    files
-      .filter((f) => f.endsWith('.json'))
-      .map((f) => readJson<Automation>(path.join(dirs.automations, f))),
-  );
-  return all
-    .filter((a): a is Automation => !!a)
-    .filter((a) => !ownerId || a.ownerId === ownerId || a.visibility === 'public')
-    .sort((x, y) => y.updatedAt - x.updatedAt);
-}
+  async put<T extends { id?: string }>(collection: CoreCollection, record: T): Promise<T> {
+    await init();
+    const id = record.id;
+    /* `id?` rather than `id`, deliberately: how strictly `z.infer` reports a
+       required field depends on how the schema package resolves, which differs
+       between the workspace and a bare install of one app. This runtime guard
+       is the real check and always was. */
+    if (!id || !safeId(id)) throw new Error(`Unsafe id for ${collection}: ${String(id)}`);
+    await writeJson(path.join(dirs[collection], `${id}.json`), record);
+    return record;
+  },
 
-export async function deleteAutomation(id: string): Promise<boolean> {
-  await init();
-  try {
-    await fs.unlink(path.join(dirs.automations, `${id}.json`));
-    return true;
-  } catch {
-    return false;
-  }
-}
+  async list<T>(collection: CoreCollection, where?: (record: T) => boolean): Promise<T[]> {
+    await init();
+    const files = await fs.readdir(dirs[collection]).catch(() => [] as string[]);
+    const all: (T | null)[] = await Promise.all(
+      files
+        .filter((f) => f.endsWith('.json'))
+        .map((f) => readJson<T>(path.join(dirs[collection], f))),
+    );
+    const present = all.filter((r): r is T => r !== null);
+    return where ? present.filter(where) : present;
+  },
 
-// ── runs ───────────────────────────────────────────────────────────────────
-export async function saveRun(run: Run): Promise<Run> {
-  await init();
-  await writeJson(path.join(dirs.runs, `${run.id}.json`), run);
-  return run;
-}
+  async remove(collection: CoreCollection, id: string): Promise<boolean> {
+    await init();
+    if (!safeId(id)) return false;
+    try {
+      await fs.unlink(path.join(dirs[collection], `${id}.json`));
+      return true;
+    } catch {
+      return false;
+    }
+  },
+};
 
-export async function getRun(id: string): Promise<Run | null> {
-  await init();
-  return readJson<Run>(path.join(dirs.runs, `${id}.json`));
-}
+/**
+ * Postgres when it is configured, files otherwise.
+ *
+ * Chosen once, at startup, rather than per call — a store that changes its mind
+ * halfway through a run would write half a subscription to each.
+ */
+export const store: Store = supabaseStoreFromEnv(process.env) ?? fileStore;
 
-export async function listRuns(automationId?: string, limit = 50): Promise<Run[]> {
-  await init();
-  const files = await fs.readdir(dirs.runs).catch(() => [] as string[]);
-  const all = await Promise.all(
-    files.filter((f) => f.endsWith('.json')).map((f) => readJson<Run>(path.join(dirs.runs, f))),
-  );
-  return all
-    .filter((r): r is Run => !!r)
-    .filter((r) => !automationId || r.automationId === automationId)
-    .sort((x, y) => y.startedAt - x.startedAt)
-    .slice(0, limit);
-}
+/** True when records are going to Postgres — reported by /health. */
+export const storeBackend: 'supabase' | 'files' = store === fileStore ? 'files' : 'supabase';
 
-// ── screenshots ────────────────────────────────────────────────────────────
+const library = createLibrary(store);
+
+// ── automations and runs ───────────────────────────────────────────────────
+export const saveAutomation = (a: Automation) => library.saveAutomation(a);
+export const getAutomation = (id: string) => library.getAutomation(id);
+export const deleteAutomation = (id: string) => library.deleteAutomation(id);
+export const listAutomations = (ownerId?: string) => library.listAutomations(ownerId);
+export const saveRun = (run: Run) => library.saveRun(run);
+export const getRun = (id: string) => library.getRun(id);
+export const listRuns = (automationId?: string, limit = 50) => library.listRuns(automationId, limit);
+
+// ── generic collections ────────────────────────────────────────────────────
+export const put = <T extends { id?: string }>(collection: Collection, record: T) =>
+  store.put(collection, record);
+export const get = <T>(collection: Collection, id: string) => store.get<T>(collection, id);
+export const list = <T>(collection: Collection, where?: (record: T) => boolean) =>
+  store.list<T>(collection, where);
+export const remove = (collection: Collection, id: string) => store.remove(collection, id);
+
+/* ── screenshots ────────────────────────────────────────────────────────────
+   Left on disk in both modes. They are large, they are only ever fetched by
+   the run that produced them, and putting a few hundred kilobytes of base64
+   into every row would make the records table expensive for a picture nobody
+   looks at twice. On a host with no volume they simply do not survive a
+   restart, which is the right trade for what they are. */
+
 export async function saveScreenshot(key: string, buf: Buffer): Promise<string> {
   await init();
   await fs.writeFile(path.join(dirs.screenshots, `${key}.png`), buf);
@@ -125,59 +160,6 @@ export async function readScreenshot(key: string): Promise<Buffer | null> {
     return await fs.readFile(path.join(dirs.screenshots, `${key}.png`));
   } catch {
     return null;
-  }
-}
-
-/* ── generic collections ────────────────────────────────────────────────────
-   Accounts, listings, subscriptions, payment methods and invoices are all the
-   same shape of problem: a folder of JSON records with an id. One set of
-   helpers rather than five copies of the three above. */
-
-const safeId = (id: string) => /^[\w-]+$/.test(id);
-
-/**
- * `id?` rather than `id`, deliberately.
- *
- * The records handed here are Zod-inferred, and how strictly `z.infer` reports
- * a required field depends on how the schema package resolves — which differs
- * between the workspace and a bare install of one app. A build that resolved it
- * loosely failed on the call sites rather than here, which is a confusing place
- * to learn about it. The runtime guard below is the real check and always was.
- */
-export async function put<T extends { id?: string }>(collection: Collection, record: T): Promise<T> {
-  await init();
-  const id = record.id;
-  if (!id || !safeId(id)) throw new Error(`Unsafe id for ${collection}: ${String(id)}`);
-  await writeJson(path.join(dirs[collection], `${id}.json`), record);
-  return record;
-}
-
-export async function get<T>(collection: Collection, id: string): Promise<T | null> {
-  await init();
-  if (!safeId(id)) return null;
-  return readJson<T>(path.join(dirs[collection], `${id}.json`));
-}
-
-export async function list<T>(collection: Collection, where?: (record: T) => boolean): Promise<T[]> {
-  await init();
-  const files = await fs.readdir(dirs[collection]).catch(() => [] as string[]);
-  const all: (T | null)[] = await Promise.all(
-    files
-      .filter((f) => f.endsWith('.json'))
-      .map((f) => readJson<T>(path.join(dirs[collection], f))),
-  );
-  const present = all.filter((r): r is T => r !== null);
-  return where ? present.filter(where) : present;
-}
-
-export async function remove(collection: Collection, id: string): Promise<boolean> {
-  await init();
-  if (!safeId(id)) return false;
-  try {
-    await fs.unlink(path.join(dirs[collection], `${id}.json`));
-    return true;
-  } catch {
-    return false;
   }
 }
 

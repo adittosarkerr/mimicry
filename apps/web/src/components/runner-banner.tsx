@@ -4,12 +4,17 @@ import { useEffect, useState } from 'react';
 import { RUNNER_URL, runnerUnreachable } from '@/lib/api';
 
 /**
- * Says the backend is missing, once, at the top of the page.
+ * Says what is unavailable, once, at the top of the page.
  *
  * Without this, a deployed site looks entirely healthy until you press
  * something, and then reports "Failed to fetch" — a message that names neither
- * what failed nor what to do. Every feature here goes through the runner, so
- * when it is unreachable that is the only fact worth showing.
+ * what failed nor what to do.
+ *
+ * Deliberately narrow now that the site answers for itself when there is no
+ * runner: the library, the marketplace, the account and the payment sandbox
+ * all work, and a banner saying everything is broken would be a lie that sends
+ * people looking for a fault that isn't there. Only recording, running and
+ * voice actually need the browser the runner has.
  */
 export function RunnerBanner() {
   const [down, setDown] = useState(false);
@@ -45,9 +50,9 @@ export function RunnerBanner() {
   return (
     <div
       role="status"
-      className="border-b border-red-200 bg-rust-100 px-5 py-2.5 text-center text-[13px] leading-relaxed text-rust-500"
+      className="border-b border-amber-200 bg-amber-50 px-5 py-2.5 text-center text-[13px] leading-relaxed text-amber-900"
     >
-      <span className="font-semibold">The Mimic runner isn’t reachable.</span>{' '}
+      <span className="font-semibold">Recording, running and voice are unavailable.</span>{' '}
       {runnerUnreachable()}
     </div>
   );

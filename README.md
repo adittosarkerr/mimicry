@@ -45,6 +45,7 @@ cp .env.example .env.local
 | `MIMIC_INGEST_TOKEN` | Always | Any string. The extension sends it; the runner rejects recordings without it. |
 | `DEEPSEEK_API_KEY` | Voice, better forms, written answers | Without it the compiler still works from rules alone. |
 | `NEXT_PUBLIC_SUPABASE_URL` / `_ANON_KEY` | Real accounts | Without them, accounts fall back to a browser-only store and the UI says so. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Shared storage | Lets a deployed site work with no runner. Locally, records stay in JSON files without it. |
 | `MIMIC_ENFORCE_QUOTA` | Free-plan limits | On by default — 5 runs a day. Set `0` to count without refusing. |
 
 Check what actually got configured — an empty value looks identical to a
@@ -166,10 +167,23 @@ See [`PROJECT.md`](PROJECT.md) for the architecture and [`PRD.md`](PRD.md) for t
 
 Full checklist: [`DEPLOYING.md`](DEPLOYING.md).
 
-Two halves, two homes. The web app is static-ish and goes anywhere; the runner
-needs a long-lived process and a real browser, so it cannot go on Vercel.
+Two halves, two homes. The runner needs a long-lived process and a real
+browser, so it cannot go on Vercel — but almost nothing on the site needs one.
+
+| | Vercel + Supabase alone | With the runner too |
+|---|---|---|
+| Accounts, dashboard, run history | ✅ | ✅ |
+| Marketplace, billing, receipts, plan limits | ✅ | ✅ |
+| Recording, running, voice | ❌ | ✅ |
+
+The site asks the runner first for everything, and answers for itself when
+there is no runner to ask. The three it genuinely cannot do say which one
+thing to deploy, rather than timing out.
 
 ### Web app → Vercel
+
+Run [`supabase/schema.sql`](supabase/schema.sql) once in the Supabase SQL
+editor. It is one table.
 
 Import the repo, then set **Settings → Build and Deployment → Root Directory**
 to either `apps/web` or `.` — **not** `apps/runner`, which is a server and
@@ -180,9 +194,10 @@ Then set the environment variables:
 
 | Variable | Value |
 |---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` / `_ANON_KEY` | from Supabase → Project Settings → API |
+| `SUPABASE_SERVICE_ROLE_KEY` | same page, `service_role` — **server-side only** |
 | `NEXT_PUBLIC_RUNNER_URL` | `https://your-runner.onrender.com` |
 | `NEXT_PUBLIC_RUNNER_WS` | `wss://your-runner.onrender.com` |
-| `NEXT_PUBLIC_SUPABASE_URL` / `_ANON_KEY` | from Supabase → Project Settings → API |
 
 ### Runner → anywhere that runs containers
 
@@ -203,6 +218,7 @@ Runner environment:
 | `MIMIC_INGEST_TOKEN` | any secret string — the extension sends this |
 | `DEEPSEEK_API_KEY` | for voice, better forms, written answers |
 | `RUNNER_CORS` | `https://your-app.vercel.app,https://*.vercel.app` |
+| `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` | the same project as the site — otherwise the two halves keep separate records |
 | `RUNNER_STORAGE_DIR` | `/data/.mimic` — with a volume mounted at `/data` |
 
 `RUNNER_CORS` accepts a `*` wildcard for one label, which is how Vercel's

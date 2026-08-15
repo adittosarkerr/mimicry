@@ -12,7 +12,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
-      "@mimic/schema": ["../../packages/schema/src/index.ts"]
+      "@mimic/schema": ["../../packages/schema/src/index.ts"],
+      "@mimic/core": ["../../packages/core/src/index.ts"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

@@ -9,10 +9,17 @@ import type {
   Subscription,
   UserProfile,
 } from '@mimic/schema';
+import { getSupabase } from './supabase';
 
 /**
  * Client for the Mimic runner. Everything the web app knows about automations
  * and runs comes through here.
+ *
+ * The runner is asked first, always — it is the one that can actually do
+ * things. When there is no runner to ask, requests that do not need a browser
+ * fall through to this site's own API routes, which apply the same rules
+ * against the same records. That fallback is what makes a deployment without a
+ * runner a usable site rather than a page of "Failed to fetch".
  */
 
 export const RUNNER_URL = process.env.NEXT_PUBLIC_RUNNER_URL || 'http://localhost:8787';
@@ -39,7 +46,7 @@ export function runnerUnreachable(): string {
   const deployed = typeof window !== 'undefined' && !/localhost|127\.0\.0\.1/.test(window.location.host);
 
   if (deployed && local) {
-    return `This site is trying to reach the Mimic runner at ${RUNNER_URL}, which is your own machine — not a server. Set NEXT_PUBLIC_RUNNER_URL and NEXT_PUBLIC_RUNNER_WS to your deployed runner and redeploy.`;
+    return `Those need a runner — a long-lived server with a real browser on it — and this site has not been told where one is. It is currently looking at ${RUNNER_URL}, which is your own machine rather than a server. Deploy the runner (see DEPLOYING.md), then set NEXT_PUBLIC_RUNNER_URL and NEXT_PUBLIC_RUNNER_WS and redeploy. Everything else on this site works without one.`;
   }
   if (local) {
     return `Can't reach the Mimic runner at ${RUNNER_URL}. Start it with \`npm run dev:runner\`.`;
@@ -56,16 +63,78 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * The things that genuinely need the runner.
+ *
+ * Everything else — the library, the marketplace, the account, the sandbox — is
+ * records and rules, and the site can serve those from its own API routes when
+ * no runner is reachable. Recording, running and voice cannot be faked, so they
+ * are never retried here; a request that quietly did nothing would be worse
+ * than one that failed.
+ */
+const NEEDS_THE_RUNNER = [
+  /^\/api\/automations\/[^/]+\/(run|recompile)/,
+  /^\/api\/voice/,
+  /^\/api\/ingest/,
+  /^\/api\/screenshots/,
+  /^\/api\/image/,
+  /^\/api\/debug/,
+  /^\/health/,
+];
+
+/**
+ * Whether the runner answered last time we tried.
+ *
+ * Remembered so a deployment without one does not spend a failed request per
+ * call working it out again — and re-checked on a real reply, because a runner
+ * that was asleep and has woken up should be used.
+ */
+let runnerReachable: boolean | null = null;
+
+/**
+ * The signed-in person's Supabase token, when there is one.
+ *
+ * Sent to this site's own API routes only. They verify it rather than trusting
+ * it — those routes write payment records, and a user id in a header is
+ * something anyone can type. The runner uses the simpler header because it is
+ * the thing being run on your own machine.
+ */
+async function accessToken(): Promise<string | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token ?? null;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  let res: Response;
-  try {
-    res = await fetch(`${RUNNER_URL}${path}`, {
-      ...init,
-      headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
-      cache: 'no-store',
-    });
-  } catch {
-    throw new ApiError(runnerUnreachable(), 0);
+  const headers = { 'content-type': 'application/json', ...(init?.headers ?? {}) };
+  const runnerOnly = NEEDS_THE_RUNNER.some((re) => re.test(path));
+
+  let res: Response | null = null;
+
+  if (runnerReachable !== false || runnerOnly) {
+    try {
+      res = await fetch(`${RUNNER_URL}${path}`, { ...init, headers, cache: 'no-store' });
+      runnerReachable = true;
+    } catch {
+      runnerReachable = false;
+      if (runnerOnly) throw new ApiError(runnerUnreachable(), 0);
+    }
+  }
+
+  /* No runner, and this is something the site can answer for itself. Same
+     path, same body, same shapes — the only difference is who replies. */
+  if (!res) {
+    const token = await accessToken();
+    try {
+      res = await fetch(path, {
+        ...init,
+        headers: token ? { ...headers, authorization: `Bearer ${token}` } : headers,
+        cache: 'no-store',
+      });
+    } catch {
+      throw new ApiError(runnerUnreachable(), 0);
+    }
   }
 
   if (!res.ok) {

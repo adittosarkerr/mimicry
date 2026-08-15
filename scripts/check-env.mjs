@@ -49,6 +49,18 @@ const CHECKS = [
     without: 'Accounts are stored in the browser only. Nothing reaches your Supabase project.',
   },
   {
+    /* Separate from Accounts on purpose. Two of these three keys sign people
+       in; the third is what lets a server read and write their data. A
+       deployment with the first two and not the third signs you in
+       successfully and then has nowhere to put anything — which looks like a
+       different fault entirely. */
+    name: 'Shared storage (needed for the deployed site to work without a runner)',
+    keys: ['SUPABASE_SERVICE_ROLE_KEY'],
+    required: false,
+    without:
+      'Records stay in the runner’s JSON files. Fine locally; on Vercel it means no dashboard, marketplace or billing without a runner.',
+  },
+  {
     name: 'Speech to text (hosted)',
     keys: ['STT_API_KEY'],
     required: false,

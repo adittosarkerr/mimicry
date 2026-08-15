@@ -43,6 +43,7 @@ import {
   remove as removeRecord,
   saveAutomation,
   saveRun,
+  storeBackend,
 } from './store.js';
 import {
   GATEWAYS,
@@ -106,6 +107,10 @@ app.get('/health', (_req, res) => {
         ? `${config.stt.localModel} (local)`
         : false,
     sttWarm: isLocalSttWarm(),
+    /* Which store this runner is writing to. Worth reporting: "files" on a
+       host with no volume means every restart forgets everything, and that is
+       invisible until the day somebody notices their automations are gone. */
+    store: storeBackend,
     headless: config.browser.headless,
     activeRuns: activeRuns(),
     queued: queueDepth(),
