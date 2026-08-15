@@ -554,22 +554,61 @@ export async function authorAutomation(
  * sensibly without knowing the profile's spelling — `checkin` and `check_in`,
  * `guests` and `adults`.
  */
+export function applyProfileForTest(automation: Automation, profile: SiteProfile): Automation {
+  return applyProfile(automation, profile);
+}
+
 function applyProfile(automation: Automation, profile: SiteProfile): Automation {
   const authored = automation.schema.fields;
   const normalise = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
+  const has = (f: FormField) => f.defaultValue != null && f.defaultValue !== '';
+
   const valueFor = (key: string, label: string): FormField['defaultValue'] => {
-    const byKey = authored.find((f) => normalise(f.key) === normalise(key));
-    if (byKey?.defaultValue != null && byKey.defaultValue !== '') return byKey.defaultValue;
-    const byLabel = authored.find(
-      (f) => normalise(f.label) === normalise(label) || normalise(f.key) === normalise(label),
-    );
-    return byLabel?.defaultValue ?? null;
+    const want = [normalise(key), normalise(label)];
+
+    // Exactly the same name is the strongest signal, so it is asked first.
+    const exact = authored.find((f) => want.includes(normalise(f.key)) || want.includes(normalise(f.label)));
+    if (exact && has(exact)) return exact.defaultValue;
+
+    /* Then by overlap, because the model names things sensibly without knowing
+       this site's spelling: `star_rating` for `stars`, `breakfast_included`
+       for `breakfast`, `checkin_date` for `check_in`. Substring either way,
+       and the shortest name wins so `children` does not swallow `child_age`. */
+    const near = authored
+      .filter(has)
+      .filter((f) => {
+        const names = [normalise(f.key), normalise(f.label)];
+        return names.some((n) => want.some((w) => w.length > 3 && (n.includes(w) || w.includes(n))));
+      })
+      .sort((a, b) => a.key.length - b.key.length)[0];
+
+    return near?.defaultValue ?? null;
+  };
+
+  /** The model says 5 or "yes"; the profile wants "5" or true. */
+  const coerce = (field: FormField, value: FormField['defaultValue']): FormField['defaultValue'] => {
+    if (field.kind === 'toggle' || field.kind === 'checkbox') {
+      return typeof value === 'boolean' ? value : /^(1|true|yes|on|included)$/i.test(String(value));
+    }
+    if (field.kind === 'select') {
+      const asText = String(value);
+      // Only if the site actually offers it — an invented option filters to nothing.
+      const match = field.options.find(
+        (o) => normalise(o.value) === normalise(asText) || normalise(o.label) === normalise(asText),
+      );
+      return match ? match.value : (field.defaultValue ?? '');
+    }
+    if (field.kind === 'number') {
+      const n = Number(value);
+      return Number.isFinite(n) ? n : field.defaultValue;
+    }
+    return value;
   };
 
   const fields: FormField[] = profile.fields.map((field) => {
     const heard = valueFor(field.key, field.label);
-    return heard === null || heard === undefined ? field : { ...field, defaultValue: heard };
+    return heard === null || heard === undefined ? field : { ...field, defaultValue: coerce(field, heard) };
   });
 
   return {
