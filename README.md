@@ -47,6 +47,13 @@ cp .env.example .env.local
 | `NEXT_PUBLIC_SUPABASE_URL` / `_ANON_KEY` | Real accounts | Without them, accounts fall back to a browser-only store and the UI says so. |
 | `MIMIC_ENFORCE_QUOTA` | Free-plan limits | Off by default. Usage is counted either way. |
 
+Check what actually got configured — an empty value looks identical to a
+missing one everywhere except here:
+
+```bash
+node scripts/check-env.mjs
+```
+
 Run both halves:
 
 ```bash

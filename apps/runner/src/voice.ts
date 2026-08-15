@@ -28,6 +28,39 @@ import { transcribeLocally } from './stt-local.js';
  * user actually has before it is rewritten — silently changing what someone
  * said is a worse failure than passing through a name we don't recognise.
  */
+/**
+ * Hostnames the person actually named.
+ *
+ * Used to stop a saved automation being reused for a site nobody asked for.
+ * "fmovies.org" and "fmovies.com" are two different companies — one of them
+ * may be a squatter serving something else entirely — and a matcher that reads
+ * them as the same word will happily send somebody to the wrong one and report
+ * 95% confidence about it.
+ */
+export function sitesNamedIn(transcript: string): string[] {
+  const found = new Set<string>();
+
+  // Written normally: "fmovies.org", "www.booking.com".
+  for (const [, host] of transcript.matchAll(
+    /\b((?:[a-z0-9][a-z0-9-]*\.)+(?:com|net|org|io|ai|app|co|dev|xyz|info|tv|me|bd|in|uk|co\.uk|com\.bd))\b/gi,
+  )) {
+    found.add(host.toLowerCase().replace(/^www\./, ''));
+  }
+
+  // Dictated: "fmovies dot org".
+  for (const [, stem, tld] of transcript.matchAll(
+    /\b([a-z0-9][a-z0-9-]{1,})\s+dot\s+(com|net|org|io|ai|app|co|dev|xyz|info|tv|me|bd|in|uk)\b/gi,
+  )) {
+    found.add(`${stem.toLowerCase()}.${tld.toLowerCase()}`);
+  }
+
+  return [...found];
+}
+
+/** Same site, ignoring a `www.` prefix. */
+export const sameHost = (a: string, b: string): boolean =>
+  a.toLowerCase().replace(/^www\./, '') === b.toLowerCase().replace(/^www\./, '');
+
 export function repairHostnames(transcript: string, knownSites: string[]): string {
   const hosts = Array.from(
     new Set(
@@ -70,8 +103,15 @@ export function repairHostnames(transcript: string, knownSites: string[]): strin
       // Close enough to be a mishearing, far enough that an unrelated site is
       // left alone. Anything below this passes through untouched.
       if (!best || best.score < 0.72) return whole;
-      void suffix;
-      return best.usedPrev ? best.host : `${prev ? `${prev} ` : ''}${best.host}`;
+
+      /* Repair the name, keep the ending they said.
+         The suffix was being thrown away and replaced with whatever the known
+         site happened to use, which turns a request for one company's site
+         into a request for a different company's. Only the misheard part is
+         ours to correct. */
+      const spokenTld = suffix.replace(/\s*(?:dot|\.)\s*/i, '').toLowerCase();
+      const repaired = `${best.host.split('.')[0]}.${spokenTld || best.host.split('.').slice(1).join('.')}`;
+      return best.usedPrev ? repaired : `${prev ? `${prev} ` : ''}${repaired}`;
     },
   );
 }

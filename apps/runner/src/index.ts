@@ -17,7 +17,13 @@ import { harvestFields } from './compile/harvest.js';
 import { runAutomation } from './replay/engine.js';
 import { markFinished, publish, subscribe } from './bus.js';
 import { withSlot, activeRuns, queueDepth } from './queue.js';
-import { planFromTranscript, repairHostnames, transcribeAudio } from './voice.js';
+import {
+  planFromTranscript,
+  repairHostnames,
+  sameHost,
+  sitesNamedIn,
+  transcribeAudio,
+} from './voice.js';
 import { authorAutomation, type KnownTemplate } from './authoring.js';
 import { isLocalSttWarm, warmLocalStt } from './stt-local.js';
 import { normalizeTrace } from './replay/normalize.js';
@@ -642,7 +648,18 @@ app.post(
      * proposal is how a request for flights ends up replaying a guessed URL
      * that returns a page of navigation tiles. Authoring a fresh one is
      * cheap; running a bad match is not. */
+    /* A site named out loud is not a suggestion.
+     *
+     * "fmovies.org" was answered with a saved automation for fmovies.com at 95%
+     * confidence — a different domain, a different operator, and in that case a
+     * page of something else entirely. The model reads the two as the same word
+     * however firmly the prompt says otherwise, so the rule is enforced here
+     * instead: name a host and only that host is eligible. */
+    const namedSites = sitesNamedIn(transcript);
+
     const automations = all.filter((a) => {
+      if (namedSites.length && !namedSites.some((host) => sameHost(host, a.site))) return false;
+
       const authored = /\(authored\)/.test(a.schema.compiledBy);
       if (authored && !a.verifiedAt) return false;
 
