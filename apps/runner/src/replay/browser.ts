@@ -15,7 +15,14 @@ import type { Trace } from '@mimic/schema';
  * Playwright never loads a 50MB dependency it will not use, and a deployment
  * that has neither still starts and says which one is missing.
  */
-const serverless = process.env.MIMIC_SERVERLESS_BROWSER === '1' || Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
+/* `VERCEL` is the one that matters in practice. Without it this looked for a
+   full Playwright install that a deployment does not have and cannot get, and
+   the dynamic import failed before anything had a chance to explain itself —
+   a 500 with an empty body, four seconds in. */
+const serverless =
+  process.env.MIMIC_SERVERLESS_BROWSER === '1' ||
+  Boolean(process.env.VERCEL) ||
+  Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
 
 type Launch = (options?: LaunchOptions) => Promise<Browser>;
 
@@ -25,11 +32,25 @@ async function launcher(): Promise<{ launch: Launch; args: string[]; executableP
     return { launch: chromium.launch.bind(chromium) as Launch, args: LAUNCH_ARGS };
   }
 
-  const [{ chromium: core }, sparticuz] = await Promise.all([
-    import('playwright-core'),
-    import('@sparticuz/chromium'),
-  ]);
-  const pack = sparticuz.default;
+  /* A missing browser is the single most likely thing to go wrong on a new
+     deployment, and the platform's own error for it — a module that isn't
+     there — names a package rather than a problem. Say what it means. */
+  let core: typeof import('playwright-core').chromium;
+  let pack: (typeof import('@sparticuz/chromium'))['default'];
+  try {
+    const [playwrightCore, sparticuz] = await Promise.all([
+      import('playwright-core'),
+      import('@sparticuz/chromium'),
+    ]);
+    core = playwrightCore.chromium;
+    pack = sparticuz.default;
+  } catch (err) {
+    throw new Error(
+      'This deployment has no browser to drive. It needs playwright-core and @sparticuz/chromium ' +
+        `in the deployed bundle, and could not load them (${err instanceof Error ? err.message : String(err)}). ` +
+        'Deploying the runner instead removes this whole class of problem.',
+    );
+  }
 
   return {
     launch: core.launch.bind(core) as Launch,

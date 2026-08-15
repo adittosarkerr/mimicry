@@ -27,6 +27,18 @@ const sameHost = (a: string, b: string) =>
   a.replace(/^www\./, '') === b.replace(/^www\./, '');
 
 export async function POST(req: Request) {
+  try {
+    return await plan(req);
+  } catch (err) {
+    /* An unhandled throw here becomes a 500 with an empty body, and the page
+       shows "Planning failed (500)" — which names nothing anyone can act on.
+       Whatever went wrong, say it. */
+    const message = err instanceof Error ? err.message : String(err);
+    return json({ error: message.slice(0, 600) }, 500);
+  }
+}
+
+async function plan(req: Request): Promise<Response> {
   if (!store || !library) return json({ error: unavailableReason() }, 503);
 
   const body = (await req.json().catch(() => ({}))) as { transcript?: string };
