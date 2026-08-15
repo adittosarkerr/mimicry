@@ -1,5 +1,5 @@
 import { nanoid } from 'nanoid';
-import type { Run } from '@mimic/schema';
+import type { Run, RunEvent } from '@mimic/schema';
 import { library, quota, store, unavailableReason, userIdFrom } from '@/lib/server/backend';
 import { OVER_BUDGET, runAutomation, runBudgetMs } from '@/lib/server/runner';
 
@@ -72,6 +72,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     events: [],
   } as Run);
 
+  /* Kept as they happen, so a run that runs out of time can still say how far
+     it got. Without this a timeout reports nothing but the fact of it, and
+     "which step was slow" — the only question worth asking — has no answer. */
+  const events: RunEvent[] = [];
+
   try {
     /* Two deadlines, and the engine's own is the one that matters: it stops
        and reports what it has. The outer race only exists because a hang
@@ -85,6 +90,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         userId,
         maxPages,
         headless: true,
+        emit: (event) => events.push(event),
         /* The engine stops itself and reports what it has. This is the number
            that makes the difference between a partial answer and the
            platform's error page. */
@@ -119,7 +125,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           ? 'Deploy the runner and this automation will run with no time limit.'
           : undefined,
       },
-      events: [],
+      events,
     };
     await library.saveRun(failed).catch(() => {});
     return json({ runId, status: 'failed', run: failed, error: message }, 200);
