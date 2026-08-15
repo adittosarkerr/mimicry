@@ -135,10 +135,20 @@ export async function readScreenshot(key: string): Promise<Buffer | null> {
 
 const safeId = (id: string) => /^[\w-]+$/.test(id);
 
-export async function put<T extends { id: string }>(collection: Collection, record: T): Promise<T> {
+/**
+ * `id?` rather than `id`, deliberately.
+ *
+ * The records handed here are Zod-inferred, and how strictly `z.infer` reports
+ * a required field depends on how the schema package resolves — which differs
+ * between the workspace and a bare install of one app. A build that resolved it
+ * loosely failed on the call sites rather than here, which is a confusing place
+ * to learn about it. The runtime guard below is the real check and always was.
+ */
+export async function put<T extends { id?: string }>(collection: Collection, record: T): Promise<T> {
   await init();
-  if (!safeId(record.id)) throw new Error(`Unsafe id for ${collection}: ${record.id}`);
-  await writeJson(path.join(dirs[collection], `${record.id}.json`), record);
+  const id = record.id;
+  if (!id || !safeId(id)) throw new Error(`Unsafe id for ${collection}: ${String(id)}`);
+  await writeJson(path.join(dirs[collection], `${id}.json`), record);
   return record;
 }
 

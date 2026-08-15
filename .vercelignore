@@ -1,0 +1,6 @@
+# The runner is a long-lived Playwright server — it cannot run on Vercel, and
+# including it only gets it type-checked by a build that will never deploy it.
+apps/runner
+extension
+scripts
+suite-shots
