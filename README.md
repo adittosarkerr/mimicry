@@ -162,6 +162,10 @@ See [`PROJECT.md`](PROJECT.md) for the architecture and [`PRD.md`](PRD.md) for t
 
 ## Deploying
 
+[![Deploy the runner to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/adittosarkerr/mimicry)
+
+Full checklist: [`DEPLOYING.md`](DEPLOYING.md).
+
 Two halves, two homes. The web app is static-ish and goes anywhere; the runner
 needs a long-lived process and a real browser, so it cannot go on Vercel.
 

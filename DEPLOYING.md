@@ -1,5 +1,23 @@
 # Deploying Mimicry
 
+> **The short version.** Vercel hosts the site. It cannot host the runner —
+> that drives a real Chromium and needs a long-lived process. Two services, two
+> sets of environment variables, about ten minutes.
+>
+> [![Deploy the runner to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/adittosarkerr/mimicry)
+
+## Checklist
+
+- [ ] 1. Deploy the runner (button above, or `fly deploy`)
+- [ ] 2. Copy its URL — `https://something.onrender.com`
+- [ ] 3. On Vercel, set `NEXT_PUBLIC_RUNNER_URL` and `NEXT_PUBLIC_RUNNER_WS`
+- [ ] 4. On Vercel, set the two `NEXT_PUBLIC_SUPABASE_*` keys
+- [ ] 5. On the runner, set `RUNNER_CORS` to your Vercel domain
+- [ ] 6. **Redeploy Vercel** — `NEXT_PUBLIC_*` is baked in at build time
+- [ ] 7. Set Root Directory to `apps/web` (removes the workaround config)
+
+---
+
 Two halves, two homes.
 
 | | Where | Why |
@@ -51,10 +69,26 @@ If the field currently says `apps/runner`, clear it and pick one of the above.
 |---|---|
 | `NEXT_PUBLIC_RUNNER_URL` | `https://your-runner.onrender.com` |
 | `NEXT_PUBLIC_RUNNER_WS` | `wss://your-runner.onrender.com` |
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Project Settings → API |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | same page |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Project Settings → API → Project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | same page → Project API keys → `anon` `public` |
 
 These are read at **build** time, so a change needs a redeploy to take effect.
+Setting them and reloading does nothing; the values are compiled into the
+JavaScript that was already built.
+
+### Supabase needs no database work
+
+The app uses `supabase.auth` only — sign up, sign in, sign out, session. There
+are no tables to create, no SQL to run, no row-level security to configure.
+Paste the two keys and accounts start working.
+
+The one setting worth checking is **Authentication → Providers → Email**. If
+"Confirm email" is on, a new account cannot sign in until the link is clicked,
+which reads as a broken sign-up. Turn it off while testing.
+
+Until the keys are set, accounts fall back to a browser-only store and the
+sign-up page says so in as many words — that notice disappearing is how you
+know it worked.
 
 ---
 
