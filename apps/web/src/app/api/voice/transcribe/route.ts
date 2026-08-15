@@ -13,7 +13,7 @@ import { repairHostnames, resolveSpelling, runnerConfig, transcribeAudio } from 
  */
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 120;
+export const maxDuration = 60;
 
 const json = (body: unknown, status = 200) =>
   Response.json(body, { status, headers: { 'cache-control': 'no-store' } });

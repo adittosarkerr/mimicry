@@ -14,9 +14,12 @@ import { OVER_BUDGET, runAutomation, runBudgetMs } from '@/lib/server/runner';
  */
 
 export const dynamic = 'force-dynamic';
-/* Vercel's own ceiling is 60s on Hobby and 300s on Pro. Asking for 300 is
-   harmless on a plan that caps lower — it is clamped, not rejected. */
-export const maxDuration = 300;
+/* 60 rather than 300, because a Hobby project refuses the whole deployment
+   when a function asks for more — the build succeeds and then nothing ships,
+   which looks exactly like a build that is still running. Pro allows 300;
+   raise it there from vercel.json's `functions` block rather than here, so
+   this file stays deployable on either plan. */
+export const maxDuration = 60;
 
 const json = (body: unknown, status = 200) =>
   Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
