@@ -167,18 +167,21 @@ See [`PROJECT.md`](PROJECT.md) for the architecture and [`PRD.md`](PRD.md) for t
 
 Full checklist: [`DEPLOYING.md`](DEPLOYING.md).
 
-Two halves, two homes. The runner needs a long-lived process and a real
-browser, so it cannot go on Vercel — but almost nothing on the site needs one.
+Vercel and Supabase are enough to run all of it, including automations —
+those go through a serverless Chromium, driven by the same engine. The runner
+is what removes the limits.
 
 | | Vercel + Supabase alone | With the runner too |
 |---|---|---|
 | Accounts, dashboard, run history | ✅ | ✅ |
 | Marketplace, billing, receipts, plan limits | ✅ | ✅ |
-| Recording, running, voice | ❌ | ✅ |
+| Recording, voice planning and authoring | ✅ | ✅ |
+| Running an automation | ✅ up to ~1 min | ✅ no limit |
+| Live console while it runs | shown at the end | streamed |
+| Speech to text | needs `STT_API_KEY` | works offline |
 
-The site asks the runner first for everything, and answers for itself when
-there is no runner to ask. The three it genuinely cannot do say which one
-thing to deploy, rather than timing out.
+The site asks the runner first for everything and answers for itself when there
+is no runner to ask.
 
 ### Web app → Vercel
 

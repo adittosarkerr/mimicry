@@ -28,7 +28,7 @@ const json = (body: unknown, status = 200) =>
       /* The extension is not a page on this site, so its request is
          cross-origin by definition. Only this route needs to say so. */
       'access-control-allow-origin': '*',
-      'access-control-allow-headers': 'content-type, x-mimic-token',
+      'access-control-allow-headers': 'content-type, authorization, x-mimic-token',
       'access-control-allow-methods': 'POST, OPTIONS',
     },
   });
@@ -45,8 +45,13 @@ export async function POST(req: Request) {
       503,
     );
   }
-  if (req.headers.get('x-mimic-token') !== expected) {
-    return json({ error: 'That ingest token is not right.' }, 401);
+  /* Two spellings, because the extension in the wild sends the bearer header
+     and a newer one need not be taught a second convention to reach a site
+     rather than a runner. The same secret either way. */
+  const bearer = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '').trim();
+  const supplied = bearer || req.headers.get('x-mimic-token') || '';
+  if (supplied !== expected) {
+    return json({ error: 'Invalid ingest token. Check the extension settings.' }, 401);
   }
 
   if (!store || !library) return json({ error: unavailableReason() }, 503);

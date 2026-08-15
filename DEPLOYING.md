@@ -15,13 +15,31 @@
 | Dashboard, saved automations, run history | ✅ | ✅ |
 | Marketplace: browse, publish, subscribe | ✅ | ✅ |
 | Payment sandbox, receipts, plan limits | ✅ | ✅ |
-| **Recording from the extension** | ❌ | ✅ |
-| **Running an automation** | ❌ | ✅ |
-| **Voice** | ❌ | ✅ |
+| Recording from the extension | ✅ | ✅ |
+| Running an automation | ✅ up to ~1 min | ✅ no limit |
+| Live step-by-step console while it runs | ❌ shown at the end | ✅ |
+| Voice: planning and authoring | ✅ | ✅ |
+| Voice: speech to text | ✅ with `STT_API_KEY` | ✅ works offline |
 
-The site asks the runner first for everything, and falls back to answering for
-itself when there is no runner to ask. The three rows it cannot answer say so
-in a sentence naming what to deploy, rather than timing out.
+The site asks the runner first for everything and answers for itself when there
+is no runner to ask. Runs happen inside a serverless function with a Chromium
+built for one — the same engine, the same extractor, the same site profiles.
+
+Three differences worth knowing before you rely on it:
+
+**A function has a deadline** — 60 seconds on Hobby, 300 on Pro. Most runs
+finish well inside that; a catalogue with two hundred products does not. The
+run stops at its budget and says so rather than being killed with nothing to
+show. Default page depth there is 3 rather than 10.
+
+**A function has no socket**, so the step-by-step console cannot stream. The run
+comes back whole, with every event, when it finishes.
+
+**Speech to text needs a hosted transcriber.** The runner falls back to a local
+Whisper model; nothing serverless can, because the model is hundreds of
+megabytes and the filesystem cannot keep it between calls. Chrome's own
+recogniser is tried first and usually works; set `STT_API_KEY` for the rest, or
+type the request instead.
 
 ## Checklist
 
@@ -120,9 +138,17 @@ If the field currently says `apps/runner`, clear it and pick one of the above.
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase Project URL | Accounts |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase `anon` key | Accounts |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase `service_role` key | Everything the site stores |
-| `NEXT_PUBLIC_RUNNER_URL` | `https://your-runner.onrender.com` | Recording, running, voice |
+| `DEEPSEEK_API_KEY` | from DeepSeek | Voice, better field names, written answers |
+| `MIMIC_INGEST_TOKEN` | any secret string | Recordings from the extension |
+| `STT_API_KEY` / `STT_BASE_URL` / `STT_MODEL` | any OpenAI-compatible transcriber | Speech, where the browser can't |
+| `NEXT_PUBLIC_RUNNER_URL` | `https://your-runner.onrender.com` | Long runs, live console |
 | `NEXT_PUBLIC_RUNNER_WS` | `wss://your-runner.onrender.com` | Live run events |
+| `MIMIC_RUN_BUDGET_MS` | `280000` on Pro | Longer runs than the 55s default |
 | `MIMIC_ENFORCE_QUOTA` | `0` to count runs without refusing | Optional |
+
+`MIMIC_RUN_BUDGET_MS` should stay a few seconds under your plan's function
+limit. Above it, the platform kills the function instead of the run stopping
+tidily, and a killed function reports nothing at all.
 
 The `NEXT_PUBLIC_*` ones are read at **build** time, so a change needs a
 redeploy to take effect. Setting them and reloading does nothing; the values
