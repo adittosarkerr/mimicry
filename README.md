@@ -167,14 +167,12 @@ needs a long-lived process and a real browser, so it cannot go on Vercel.
 
 ### Web app → Vercel
 
-Import the repo. `vercel.json` at the root already sets the build:
+Import the repo, then set **Settings → Build and Deployment → Root Directory**
+to either `apps/web` or `.` — **not** `apps/runner`, which is a server and
+cannot build. That field is dashboard-only; `vercel.json` has no key for it, so
+a wrong value cannot be fixed by any commit.
 
-```json
-{ "buildCommand": "npm run build -w @mimic/web", "outputDirectory": "apps/web/.next" }
-```
-
-Leave **Root Directory** as the repository root — not `apps/runner`, which is a
-server and will fail to build. Then set the environment variables:
+Then set the environment variables:
 
 | Variable | Value |
 |---|---|
@@ -191,6 +189,8 @@ system libraries are already correct and matched to the version in the code.
 **Fly** — `fly.toml` is ready: `fly launch --no-deploy` then `fly deploy`.
 **Railway / anything else** — point it at `apps/runner/Dockerfile` with the repo
 root as the build context.
+
+Step-by-step, with the failure modes: [`DEPLOYING.md`](DEPLOYING.md).
 
 Runner environment:
 
