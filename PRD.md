@@ -93,7 +93,7 @@ times.** Everything else is inference.
 - Dashboard: automations, runs, usage, billing
 - Marketplace: publish, subscribe, unpublish
 - **Sandbox payments:** bKash, Nagad, Rocket, card, bank — OTP, declines, receipts. No real money.
-- Usage counted per day; free-plan limit enforced behind a flag
+- Usage counted per day; free plan capped at 5 runs a day, enforced by default
 
 ### Not in scope for this build
 
@@ -110,14 +110,15 @@ times.** Everything else is inference.
 | | Free | Starter | Pro | Team |
 |---|---|---|---|---|
 | Price | $0 | $9/mo | $29/mo | $99/mo |
-| Runs/day | 3 | 25 | 100 | 500 |
+| Runs/day | 5 | 25 | 100 | 500 |
 | Automations | 5 | 25 | 200 | 1,000 |
 | Seats | 1 | 1 | 1 | 5 |
 | Overage | — | $0.05/run | $0.03/run | $0.02/run |
 
-Limits are shaped by cost: each run drives a real browser for 30+ seconds. Enforcement is behind
-`MIMIC_ENFORCE_QUOTA` so development isn't walled off after three runs; usage is counted regardless,
-so the numbers are real before the cap is switched on.
+Limits are shaped by cost: each run drives a real browser for 30+ seconds. The free plan's five
+runs a day are **enforced**; set `MIMIC_ENFORCE_QUOTA=0` to keep counting without refusing, which
+is what you want during a testing session. Usage is counted either way, so the dashboard was
+showing real numbers before the cap started biting.
 
 ---
 

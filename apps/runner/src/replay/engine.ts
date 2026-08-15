@@ -631,8 +631,18 @@ export async function runAutomation(opts: RunOptions): Promise<Run> {
     const navigationOnly = looksLikeNavigation(output.items);
     if (navigationOnly) {
       output.emptyReason =
-        'The page did show a repeating block, but the entries carry no prices, dates, ratings or descriptions — ' +
-        "that is the site's own navigation, not results. The automation is probably pointing at the wrong page.";
+        `The page did show a repeating block of ${output.items.length}, but the entries carry no prices, dates, ` +
+        "ratings or descriptions — that is the site's own navigation, not results. " +
+        'The automation is probably pointing at the wrong page.';
+
+      /* And throw them away.
+       *
+       * Saying "this is navigation" while still rendering "9 products" —
+       * Search, Awards, Newsroom, Media and Events — is worse than either
+       * answer on its own: the warning is somewhere off screen and the wrong
+       * result is the thing being read. The candidates survive, so the right
+       * block can still be chosen by hand. */
+      output.items = [];
     }
 
     if (output.items.length && !navigationOnly) {

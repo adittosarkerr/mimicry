@@ -30,12 +30,12 @@ export const config = {
   /**
    * Whether the free plan's daily run limit actually refuses a run.
    *
-   * Off by default. Usage is counted either way, so the dashboard shows real
-   * numbers — but a cap that bites during development stops every test session
-   * three runs in, for reasons that have nothing to do with what is being
-   * tested. Set MIMIC_ENFORCE_QUOTA=1 to switch it on.
+   * On by default now that the product is being used rather than built. Usage
+   * is counted either way, so the dashboard was already showing real numbers
+   * before the cap started biting. Set MIMIC_ENFORCE_QUOTA=0 to turn it off
+   * for a testing session.
    */
-  enforceQuota: bool(process.env.MIMIC_ENFORCE_QUOTA, false),
+  enforceQuota: bool(process.env.MIMIC_ENFORCE_QUOTA, true),
 
   deepseek: {
     apiKey: process.env.DEEPSEEK_API_KEY || '',
@@ -67,8 +67,6 @@ export const config = {
      * downloaded once and cached, so voice works out of the box with no key.
      * Set STT_LOCAL=0 to turn that off.
      */
-    // base.en over tiny.en: noticeably better on real microphones and accents,
-    // still around a second for a short request.
     /* `small.en` rather than `base.en`.
      *
      * Base is the weakest model that works at all, and it fails precisely where

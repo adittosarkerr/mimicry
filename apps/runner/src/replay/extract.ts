@@ -295,10 +295,18 @@ function detectItems(args: { itemSelector: string | null; pinned: boolean }): Ra
   if (!groups.length) {
     // Page furniture that repeats just as reliably as results but never *is*
     // the results: footnotes, navboxes, breadcrumbs, site nav.
+    /* Kept identical to the copy in `scoreRegions`. Both run inside
+       page.evaluate and cannot share a module constant — and when they drifted
+       apart, the stricter one was the one nobody's results came from: a fridge
+       search returned nine "products" made of Search, Awards, Newsroom and
+       Media and Events, straight out of the footer this list was supposed to
+       be excluding. */
     const EXCLUDE =
-      'nav, footer, aside, [role="navigation"], [role="contentinfo"], [role="doc-endnotes"], ' +
-      '.references, .reflist, .mw-references-wrap, .navbox, .catlinks, .toc, ' +
-      '[class*="footnote" i], [class*="breadcrumb" i], [class*="pagination" i], [class*="sidebar" i]';
+      'nav, footer, aside, header, [role="navigation"], [role="contentinfo"], [role="banner"], ' +
+      '[role="doc-endnotes"], .references, .reflist, .mw-references-wrap, .navbox, .catlinks, ' +
+      '.toc, [class*="footnote" i], [class*="breadcrumb" i], [class*="pagination" i], ' +
+      '[class*="sidebar" i], [class*="footer" i], [id*="footer" i], [class*="site-header" i], ' +
+      '[id*="header" i], [class*="topbar" i], [class*="menu" i], [class*="navbar" i]';
 
     // Every element, not a fixed tag list: results live in <tbody> rows on
     // older sites and inside custom elements (<shreddit-post>, <ytd-…>) on
@@ -381,6 +389,60 @@ function detectItems(args: { itemSelector: string | null; pinned: boolean }): Ra
           : winner.members;
 
       groups.push(usable);
+    }
+  }
+
+  /* One result is still a result.
+   *
+   * Every rule above needs three repeating siblings, because that is what makes
+   * a list detectable. A search that matched a single product has no siblings
+   * to repeat — so the detector looks past it and settles on whatever else on
+   * the page comes in threes, which is how a fridge search returned Search,
+   * Awards, Newsroom and Media and Events.
+   *
+   * A card does not need siblings to be recognisable: a picture, a link, and a
+   * price on a line of its own. Where the repeated block has none of that and
+   * cards like this exist, the cards are the results.
+   */
+  const cardLike = (): Element[] => {
+    const PRICE_LINE = /^(?:[^\w\s]{0,3}\s?)?[\d][\d,.]{2,}(?:\s?[A-Z]{2,4})?$/;
+    const found: Element[] = [];
+
+    for (const el of Array.from(document.querySelectorAll('*'))) {
+      if (found.length >= 40) break;
+      if (!visible(el) || !el.children.length) continue;
+
+      // Raw innerText: `clean` flattens the newlines, and a price is only
+      // recognisable because it sits on a line of its own.
+      const lines = ((el as HTMLElement).innerText ?? '')
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      // A card is small. A section containing every card is not.
+      if (!lines.length || lines.length > 14) continue;
+      if (!el.querySelector('img') || !el.querySelector('a[href]')) continue;
+      if (!lines.some((l) => PRICE_LINE.test(l))) continue;
+
+      found.push(el);
+    }
+
+    // Keep the innermost of any nested run — the card, not its wrapper.
+    return found.filter((el) => !found.some((other) => other !== el && el.contains(other)));
+  };
+
+  const best = groups[0];
+  const looksThin =
+    !best ||
+    best.filter((m) => m.querySelector('img') && /[\d][\d,.]{2,}/.test((m as HTMLElement).innerText ?? ''))
+      .length /
+      best.length <
+      0.34;
+
+  if (!compiledGroup && looksThin) {
+    const cards = cardLike();
+    if (cards.length) {
+      groups.length = 0;
+      groups.push(cards);
     }
   }
 
@@ -716,9 +778,17 @@ function scoreRegions(): {
   };
 
   const EXCLUDE =
-    'nav, footer, aside, [role="navigation"], [role="contentinfo"], [role="doc-endnotes"], ' +
-    '.references, .reflist, .navbox, .catlinks, .toc, [class*="footnote" i], ' +
-    '[class*="breadcrumb" i], [class*="pagination" i], [class*="sidebar" i]';
+    'nav, footer, aside, header, [role="navigation"], [role="contentinfo"], [role="banner"], ' +
+    '[role="doc-endnotes"], .references, .reflist, .navbox, .catlinks, .toc, ' +
+    '[class*="footnote" i], [class*="breadcrumb" i], [class*="pagination" i], ' +
+    '[class*="sidebar" i], ' +
+    /* Plenty of sites never use the semantic tags. Walton's footer is a plain
+       <div class="footer"> holding five columns of links, which is a textbook
+       repeated block — uniform, linked, evenly sized — and it scored well
+       enough to be returned as nine "products" for a fridge search that had
+       found exactly one. Matching on the name catches those. */
+    '[class*="footer" i], [id*="footer" i], [class*="site-header" i], [id*="header" i], ' +
+    '[class*="topbar" i], [class*="menu" i], [class*="navbar" i]';
 
   const scored: { selector: string; count: number; score: number; samples: string[] }[] = [];
   const seenSelectors = new Set<string>();
@@ -891,6 +961,14 @@ export function looksLikeNavigation(items: ResultItem[]): boolean {
       Object.keys(i.meta).length > 0 ||
       (i.description?.length ?? 0) > 40,
   ).length;
+
+  /* Any one item carrying a real fact is enough to call this a list.
+   *
+   * A proportional test was tried and reverted: it read Amazon's own results
+   * and a page of article links as navigation and threw both away. Sparse
+   * lists are normal, and the cost of being wrong here is deleting somebody's
+   * actual results — so the benefit of the doubt goes to the page. The Walton
+   * footer case is handled where it belongs, by not scanning footers. */
   if (substantive > 0) return false;
 
   /* Pictures are the deciding vote at run time.

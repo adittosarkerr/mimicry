@@ -25,7 +25,7 @@ import { get, list, put } from './store.js';
 export const PLANS = {
   free: {
     label: 'Free',
-    runsPerDay: 3,
+    runsPerDay: 5,
     automations: 5,
     priceMinor: 0,
     currency: 'USD',

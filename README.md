@@ -45,7 +45,7 @@ cp .env.example .env.local
 | `MIMIC_INGEST_TOKEN` | Always | Any string. The extension sends it; the runner rejects recordings without it. |
 | `DEEPSEEK_API_KEY` | Voice, better forms, written answers | Without it the compiler still works from rules alone. |
 | `NEXT_PUBLIC_SUPABASE_URL` / `_ANON_KEY` | Real accounts | Without them, accounts fall back to a browser-only store and the UI says so. |
-| `MIMIC_ENFORCE_QUOTA` | Free-plan limits | Off by default. Usage is counted either way. |
+| `MIMIC_ENFORCE_QUOTA` | Free-plan limits | On by default — 5 runs a day. Set `0` to count without refusing. |
 
 Check what actually got configured — an empty value looks identical to a
 missing one everywhere except here:
