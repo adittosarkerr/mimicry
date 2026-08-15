@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import type { FormSchema, Run, RunEvent, RunStatus } from '@mimic/schema';
-import { api, RUNNER_URL, streamRun, type RunStream } from '@/lib/api';
+import { api, runnerUnreachable, RUNNER_URL, streamRun, type RunStream } from '@/lib/api';
 import { RunConsole } from '@/components/run/run-console';
 import { OutputView } from '@/components/run/output-view';
 import { RunApiPanel } from '@/components/run/run-api-panel';
@@ -327,7 +327,11 @@ export function VoiceStudio() {
         setValues({ ...seeded, ...next.values });
         setStage('ready');
       } catch (e) {
-        setError((e as Error).message);
+        /* A network-level failure has no useful message of its own — "Failed to
+           fetch" tells the reader nothing about which of two very different
+           things went wrong. */
+        const err = e as Error;
+        setError(err.name === 'TypeError' ? runnerUnreachable() : err.message);
         setStage('idle');
       }
     },

@@ -25,6 +25,28 @@ export type AutomationSummary = Omit<Automation, 'trace'> & {
   finalUrl?: string;
 };
 
+/**
+ * Why the runner could not be reached, in terms the reader can act on.
+ *
+ * "Failed to fetch" is what the browser says and it explains nothing. The two
+ * real causes have completely different fixes, and both are detectable from
+ * here: a deployed site still pointing at localhost was never given the
+ * runner's address, and a reachable-looking address that refuses the request
+ * is usually CORS.
+ */
+export function runnerUnreachable(): string {
+  const local = /localhost|127\.0\.0\.1/.test(RUNNER_URL);
+  const deployed = typeof window !== 'undefined' && !/localhost|127\.0\.0\.1/.test(window.location.host);
+
+  if (deployed && local) {
+    return `This site is trying to reach the Mimic runner at ${RUNNER_URL}, which is your own machine — not a server. Set NEXT_PUBLIC_RUNNER_URL and NEXT_PUBLIC_RUNNER_WS to your deployed runner and redeploy.`;
+  }
+  if (local) {
+    return `Can't reach the Mimic runner at ${RUNNER_URL}. Start it with \`npm run dev:runner\`.`;
+  }
+  return `Can't reach the Mimic runner at ${RUNNER_URL}. It may still be starting — a cold start boots a browser and takes a few seconds. If it persists, check the runner is running and that this site's domain is in its RUNNER_CORS list.`;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -43,16 +65,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       cache: 'no-store',
     });
   } catch {
-    /* The advice has to match where this is running. Telling somebody using
-       the deployed site to run `npm run dev:runner` is worse than saying
-       nothing — the runner they need is a server, not a terminal command. */
-    const local = /localhost|127\.0\.0\.1/.test(RUNNER_URL);
-    throw new ApiError(
-      local
-        ? `Can't reach the Mimic runner at ${RUNNER_URL}. Start it with \`npm run dev:runner\`.`
-        : `Can't reach the Mimic runner at ${RUNNER_URL}. It may be starting up — a cold start boots a browser and takes a few seconds. If this persists, check that the runner is deployed and that this site's domain is in its RUNNER_CORS list.`,
-      0,
-    );
+    throw new ApiError(runnerUnreachable(), 0);
   }
 
   if (!res.ok) {
