@@ -26,10 +26,31 @@ const json = (body: unknown, status = 200) =>
 const sameHost = (a: string, b: string) =>
   a.replace(/^www\./, '') === b.replace(/^www\./, '');
 
+/**
+ * The last word, when the platform is about to have it.
+ *
+ * Vercel stops a function at its limit and answers 504, and the page shows
+ * "Request failed (504)" — a number that names neither what was being done nor
+ * what would make it work. Planning is given a deadline a few seconds inside
+ * that, so whatever happens the reply comes from here.
+ */
+const RAN_OUT =
+  'That took longer than this site is allowed to spend on one request. Working out how to drive a site nobody has recorded means opening it in a browser, and that does not always fit in a minute. Deploy the runner (see DEPLOYING.md) and it has no limit — or record the task once with the extension and it replays exactly.';
+
 export async function POST(req: Request) {
   try {
-    return await plan(req);
+    /* The inner work respects the deadline stage by stage, which handles the
+       ordinary case. This is for the one it cannot: a single call that hangs —
+       a model that never answers, a page that never loads — where there is no
+       next stage to check the clock. */
+    return await Promise.race([
+      plan(req),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(RAN_OUT)), (maxDuration - 3) * 1000),
+      ),
+    ]);
   } catch (err) {
+    if (err instanceof Error && err.message === RAN_OUT) return json({ error: RAN_OUT }, 200);
     /* An unhandled throw here becomes a 500 with an empty body, and the page
        shows "Planning failed (500)" — which names nothing anyone can act on.
        Whatever went wrong, say it. */
@@ -40,6 +61,10 @@ export async function POST(req: Request) {
 
 async function plan(req: Request): Promise<Response> {
   if (!store || !library) return json({ error: unavailableReason() }, 503);
+
+  /* Five seconds of headroom under the function's own limit, so the answer is
+     ours rather than the platform's. */
+  const deadline = Date.now() + (maxDuration - 5) * 1000;
 
   const body = (await req.json().catch(() => ({}))) as { transcript?: string };
   const spoken = typeof body.transcript === 'string' ? body.transcript.trim() : '';
@@ -78,7 +103,7 @@ async function plan(req: Request): Promise<Response> {
     ) || /\bfrom scratch\b|\bbrand new\b|\bnew automation\b/i.test(transcript);
 
   if (wantsNew) {
-    const authored = await authorAutomation(transcript, ownerId, known);
+    const authored = await authorAutomation(transcript, ownerId, known, { deadline });
     if (authored.automation) {
       await saveAutomation(authored.automation);
       return json(built(authored.automation, authored.confidence));

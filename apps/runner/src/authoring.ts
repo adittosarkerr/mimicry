@@ -13,6 +13,7 @@ import { detectWall, launchSession, settle, waitOutChallenge } from './replay/br
 import { extractOutput } from './replay/extract';
 import { runAutomation } from './replay/engine';
 import { exploreSite } from './explore';
+import { profileFor, type SiteProfile } from './sites/profiles';
 
 /**
  * Authoring automations from a description, with no recording.
@@ -418,11 +419,33 @@ export async function authorAutomation(
   transcript: string,
   ownerId?: string,
   known: KnownTemplate[] = [],
+  opts: { deadline?: number } = {},
 ): Promise<AuthorResult> {
   const attempts: string[] = [];
   let last: AuthorResult = { confidence: 0, refusal: 'No plan was produced.' };
 
+  /**
+   * When to stop and hand back what we have.
+   *
+   * Authoring is three tries, each writing a plan and then opening a browser to
+   * check it. On a machine with no time limit that thoroughness is free. Inside
+   * a serverless function it is not: the platform kills the request at sixty
+   * seconds and the caller gets a 504, which is the worst of both — the work
+   * was done and thrown away, and the page shows a number instead of a reason.
+   *
+   * So every stage asks whether there is time for it. Running out means
+   * returning the plan we have, unverified and marked as such, rather than
+   * nothing at all.
+   */
+  const deadline = opts.deadline ?? Number.POSITIVE_INFINITY;
+  const timeLeft = () => deadline - Date.now();
+  /* A browser check is a page load on somebody else's site. Below this there
+     is no point starting one — it will be interrupted rather than answered. */
+  const ENOUGH_TO_VERIFY = 20_000;
+  const ENOUGH_TO_RETRY = 30_000;
+
   for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (attempt > 0 && timeLeft() < ENOUGH_TO_RETRY) break;
     /* A model that returns truncated or malformed JSON is a bad attempt, not a
        server error. Retrying is what a person would do, and the loop is
        already here. */
@@ -435,6 +458,31 @@ export async function authorAutomation(
     if (!result.automation) {
       if (result.refusal) return result; // a considered refusal is final
       continue; // a broken response — try again
+    }
+
+    /* A site we already know properly needs no guessing and no checking.
+     *
+     * Booking, GoZayaan and Kayak have hand-written profiles — the exact
+     * fields, the exact URL shape, the exact result selector — because their
+     * URLs weld several values into one string and inference cannot express
+     * that. Authoring was ignoring all of it and guessing a URL from scratch,
+     * then opening a browser to find out whether the guess worked. On a site
+     * like Booking that is both slower than the request is allowed to take and
+     * worse than the answer already written down. */
+    const profile = profileFor(result.automation.site);
+    if (profile) {
+      return {
+        automation: applyProfile(result.automation, profile),
+        confidence: Math.max(result.confidence, 0.9),
+      };
+    }
+
+    /* Out of time to check it. The plan is still the best answer available,
+       and it is handed back honestly: no `verifiedAt`, and confidence that
+       says "this has not been tried". The voice studio shows the plan before
+       running anything, so the person decides. */
+    if (timeLeft() < ENOUGH_TO_VERIFY) {
+      return { automation: result.automation, confidence: Math.min(result.confidence, 0.6) };
     }
 
     const verdict = await verifyAutomation(result.automation);
@@ -467,18 +515,82 @@ export async function authorAutomation(
    * they have never seen, and it is the only route that generalises — so it is
    * where this ends up rather than a refusal. */
   const site = siteFromAttempts(last, attempts);
-  if (site) {
+  /* Exploring is the slowest thing here — a browser, several page loads, a
+     model call between each. Worth it when there is time, and guaranteed to be
+     killed halfway when there is not. */
+  if (site && timeLeft() > 25_000) {
     const explored = await exploreFrom(transcript, site, ownerId);
     if (explored.automation) return explored;
     attempts.push(`opening ${site} and driving it — ${explored.refusal}`);
   }
 
+  /* Nothing verified, but a plan exists. Better than a refusal: the person
+     sees what it would do and can run it or discard it. */
+  if (last.automation) {
+    return { automation: last.automation, confidence: Math.min(last.confidence, 0.5) };
+  }
+
+  const ranOut = timeLeft() <= 0;
   return {
-    refusal:
-      `I tried ${attempts.length} ways to do that and checked each one — none worked.\n` +
-      attempts.map((a) => `• ${a}`).join('\n') +
-      '\nRecord it once with the extension and Mimic will replay it exactly.',
+    refusal: ranOut
+      ? 'That took longer than this site is allowed to spend on one request. Sites it has never seen need a browser opened and driven, which does not fit in a minute — deploy the runner (see DEPLOYING.md) and it has no limit, or record the task once with the extension.'
+      : `I tried ${attempts.length} ways to do that and checked each one — none worked.\n` +
+        attempts.map((a) => `• ${a}`).join('\n') +
+        '\nRecord it once with the extension and Mimic will replay it exactly.',
     confidence: Math.min(last.confidence, 0.2),
+  };
+}
+
+/**
+ * Rebuilds an authored automation around a site profile.
+ *
+ * The model is good at reading a request — "two adults, one child, two rooms,
+ * five stars, breakfast" — and bad at remembering that Booking spells those
+ * `group_adults`, `no_rooms` and a `;`-joined `nflt` bundle. So its values are
+ * kept and its guesses about structure are thrown away: the profile's fields
+ * and result selector replace them wholesale.
+ *
+ * Values transfer by key, then by label, because the model names things
+ * sensibly without knowing the profile's spelling — `checkin` and `check_in`,
+ * `guests` and `adults`.
+ */
+function applyProfile(automation: Automation, profile: SiteProfile): Automation {
+  const authored = automation.schema.fields;
+  const normalise = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  const valueFor = (key: string, label: string): FormField['defaultValue'] => {
+    const byKey = authored.find((f) => normalise(f.key) === normalise(key));
+    if (byKey?.defaultValue != null && byKey.defaultValue !== '') return byKey.defaultValue;
+    const byLabel = authored.find(
+      (f) => normalise(f.label) === normalise(label) || normalise(f.key) === normalise(label),
+    );
+    return byLabel?.defaultValue ?? null;
+  };
+
+  const fields: FormField[] = profile.fields.map((field) => {
+    const heard = valueFor(field.key, field.label);
+    return heard === null || heard === undefined ? field : { ...field, defaultValue: heard };
+  });
+
+  return {
+    ...automation,
+    name: automation.name || profile.name,
+    category: profile.category,
+    emoji: profile.emoji,
+    schema: {
+      ...automation.schema,
+      category: profile.category,
+      fields,
+      groups: Array.from(new Set(fields.map((f) => f.group))),
+      output: profile.output,
+      /* The engine builds this site's URL from the profile rather than from a
+         template, so a guessed one here could only ever disagree with it. */
+      urlTemplate: undefined,
+      compiledBy: `${automation.schema.compiledBy} + ${profile.id} profile`,
+    },
+    /* Written down as checked: a profile is a hand-verified description of the
+       site, which is a better warrant than one successful page load. */
+    verifiedAt: Date.now(),
   };
 }
 
