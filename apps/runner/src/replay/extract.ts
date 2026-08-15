@@ -25,6 +25,9 @@ interface RawItem {
   attributes: { label: string; value: string }[];
   meta: Record<string, string | undefined>;
   text: string;
+  /** The card as the page lays it out. `text` has had its newlines flattened,
+      and some facts are only legible from how the lines are grouped. */
+  lines: string[];
 }
 
 /**
@@ -308,6 +311,17 @@ function detectItems(args: { itemSelector: string | null; pinned: boolean }): Ra
       '[class*="sidebar" i], [class*="footer" i], [id*="footer" i], [class*="site-header" i], ' +
       '[id*="header" i], [class*="topbar" i], [class*="menu" i], [class*="navbar" i]';
 
+    /* `closest` walks all the way up to <html>, and some of the rules above
+       match on a substring of a class name. Wikipedia's skin writes
+       `vector-feature-main-menu-pinned` onto the root element, so a rule meant
+       to skip a navigation menu matched every element on the page and returned
+       nothing at all for a screen full of search results. Nothing that
+       contains the entire document is a menu. */
+    const excluded = (el: Element): boolean => {
+      const hit = el.closest(EXCLUDE);
+      return Boolean(hit) && hit !== document.documentElement && hit !== document.body;
+    };
+
     // Every element, not a fixed tag list: results live in <tbody> rows on
     // older sites and inside custom elements (<shreddit-post>, <ytd-…>) on
     // newer ones, and a hand-written list of container tags misses both.
@@ -315,7 +329,7 @@ function detectItems(args: { itemSelector: string | null; pinned: boolean }): Ra
     const scored: { members: Element[]; score: number; sig: string }[] = [];
 
     for (const c of containers) {
-      if (c.closest(EXCLUDE)) continue;
+      if (excluded(c)) continue;
 
       const kids = Array.from(c.children).filter(visible);
       if (kids.length < 3 || kids.length > 200) continue;
@@ -518,7 +532,19 @@ function detectItems(args: { itemSelector: string | null; pinned: boolean }): Ra
        nonsense price and skipped the fallback that would have found the real
        one two lines below it. */
     const priceElText = clean((priceEl as HTMLElement | null)?.innerText);
-    let priceText = PRICE.test(priceElText) || /^[\d][\d,.]*$/.test(priceElText) ? priceElText : '';
+    /* Take the price *out* of the element, rather than taking the element's
+       whole text as the price. Sites label the number in the same box they
+       print it in — "Starting from BDT 1,830,266", "from $45 per night" — and
+       keeping the label made the value too long to be a price, which silently
+       discarded it and skipped the line-based fallback below. */
+    let priceText = PRICE.test(priceElText)
+      ? ((priceElText.match(PRICE) || [])[0] ?? '')
+      : /^[\d][\d,.]*$/.test(priceElText)
+        ? priceElText
+        : '';
+    // A "price" longer than this is a sentence that happens to contain a
+    // number. Checked here so an over-long read still falls through.
+    if (priceText.length > 24) priceText = '';
 
     /* No element admitted to being the price. Read the lines instead.
      *
@@ -721,8 +747,106 @@ function detectItems(args: { itemSelector: string | null; pinned: boolean }): Ra
       attributes: attributes.slice(0, 6),
       meta,
       text,
+      lines: rawLines.slice(0, 48),
     };
   });
+}
+
+/* ── itineraries ─────────────────────────────────────────────────────────
+   A flight is the one common result that says almost nothing in its heading.
+   Every card on a results page is headed with the airline, so ten different
+   itineraries arrive as ten copies of "Qatar Airways" with the times, the
+   route, the duration and the stops scattered across separate lines that the
+   generic reader has no reason to connect.
+
+   The shape is a web-wide convention rather than one site's markup: a time,
+   an airport code, how long it takes, how many stops, then the same again for
+   where it lands. Read positionally so a leg without a day-shift marker does
+   not drag every later leg out of alignment. */
+
+const AIRPORT = /^[A-Z]{3}$/;
+const CLOCK = /^\d{1,2}:\d{2}$/;
+const LEG_DURATION = /^\d{1,2}\s?h(?:\s?\d{1,2}\s?m)?$/i;
+const STOPS = /^(?:non[-\s]?stop|direct|\d+\s?stops?)$/i;
+const DAY_SHIFT = /^\+\s?\d+\s?days?$/i;
+
+/** Three uppercase letters that are money rather than a place. */
+const CURRENCY_CODES = new Set([
+  'BDT', 'USD', 'EUR', 'GBP', 'INR', 'AED', 'SAR', 'QAR', 'KWD', 'OMR', 'PKR',
+  'NPR', 'LKR', 'THB', 'MYR', 'IDR', 'PHP', 'JPY', 'CNY', 'KRW', 'AUD', 'CAD',
+  'CHF', 'SEK', 'NOK', 'DKK', 'TRY', 'ZAR', 'RUB', 'BRL', 'MXN',
+]);
+
+export interface Itinerary {
+  /** "DAC → JFK", or "DAC → JFK → DAC" for a return. */
+  route: string;
+  legs: { label: string; value: string }[];
+}
+
+/**
+ * Reads an itinerary out of a card's lines, or returns nothing.
+ *
+ * Deliberately strict: two airport codes, two clock times and a duration or a
+ * stop count. Anything less is a page that happens to contain capital letters,
+ * and inventing a route for it would be worse than leaving the card alone.
+ */
+export function readItinerary(lines: string[]): Itinerary | undefined {
+  const codes: number[] = [];
+  const times: number[] = [];
+  let durations = 0;
+  let stops = 0;
+
+  lines.forEach((line, i) => {
+    if (AIRPORT.test(line) && !CURRENCY_CODES.has(line)) codes.push(i);
+    else if (CLOCK.test(line)) times.push(i);
+    else if (LEG_DURATION.test(line)) durations += 1;
+    else if (STOPS.test(line)) stops += 1;
+  });
+
+  if (codes.length < 2 || times.length < 2) return undefined;
+  if (durations === 0 && stops === 0) return undefined;
+
+  /* One leg per pair of codes. A trailing odd code is a stray — a baggage
+     allowance, an alliance badge — and is dropped rather than guessed at. */
+  const legs: { label: string; value: string }[] = [];
+  const stations: string[] = [];
+
+  for (let pair = 0; pair + 1 < codes.length && pair < 6; pair += 2) {
+    const fromIdx = codes[pair];
+    const toIdx = codes[pair + 1];
+
+    // The time for a station is the last one printed before it.
+    const before = (idx: number) => {
+      const hit = [...times].reverse().find((t) => t < idx);
+      return hit === undefined ? undefined : lines[hit];
+    };
+    const between = (re: RegExp) => lines.slice(fromIdx, toIdx).find((l) => re.test(l));
+
+    const from = lines[fromIdx];
+    const to = lines[toIdx];
+    const depart = before(fromIdx);
+    const arrive = before(toIdx);
+    if (!depart || !arrive || depart === arrive) continue;
+
+    const shift = lines.slice(fromIdx, toIdx).find((l) => DAY_SHIFT.test(l));
+    const duration = between(LEG_DURATION);
+    const stopText = between(STOPS);
+
+    const value = [
+      `${depart} ${from} → ${arrive}${shift ? ` (${shift.replace(/\s/g, '')})` : ''} ${to}`,
+      duration,
+      stopText,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+
+    legs.push({ label: legs.length === 0 ? 'Outbound' : legs.length === 1 ? 'Return' : `Leg ${legs.length + 1}`, value });
+    if (!stations.length) stations.push(from);
+    stations.push(to);
+  }
+
+  if (!legs.length) return undefined;
+  return { route: stations.join(' → '), legs };
 }
 
 /**
@@ -790,6 +914,15 @@ function scoreRegions(): {
     '[class*="footer" i], [id*="footer" i], [class*="site-header" i], [id*="header" i], ' +
     '[class*="topbar" i], [class*="menu" i], [class*="navbar" i]';
 
+  /* Same guard as `detectItems`, and for the same reason: `closest` reaches
+     the root element, and a substring rule that matches there disqualifies the
+     whole page. Kept identical to that copy on purpose — when these two lists
+     drifted apart before, the results came from the wrong one. */
+  const excluded = (el: Element): boolean => {
+    const hit = el.closest(EXCLUDE);
+    return Boolean(hit) && hit !== document.documentElement && hit !== document.body;
+  };
+
   const scored: { selector: string; count: number; score: number; samples: string[] }[] = [];
   const seenSelectors = new Set<string>();
 
@@ -799,7 +932,7 @@ function scoreRegions(): {
     // newer ones, and a hand-written list of container tags misses both.
     document.querySelectorAll('*'),
   )) {
-    if (container.closest(EXCLUDE)) continue;
+    if (excluded(container)) continue;
 
     const kids = Array.from(container.children).filter(visible);
     if (kids.length < 3 || kids.length > 200) continue;
@@ -888,6 +1021,25 @@ function scoreRegions(): {
 }
 
 /**
+ * Does this text *say* the hint, rather than merely contain those characters?
+ *
+ * A plain substring test is why an Amazon search for "usb c cable" came back
+ * empty: the page says "1-16 of over 40,000 results", which contains "0
+ * results", which is the hint for a page that found nothing. Fifteen real
+ * products were discarded on the strength of the last digit of forty thousand.
+ *
+ * So a hint has to begin and end on a boundary. Digits and separators count as
+ * word characters here — "40,000" must not be allowed to end in a "0" that
+ * starts the match.
+ */
+export function saysHint(text: string, hint: string): boolean {
+  const needle = hint.trim().toLowerCase();
+  if (!needle) return false;
+  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?<![\\w,.])${escaped}(?![\\w])`, 'i').test(text);
+}
+
+/**
  * Works out what the results actually are, from the results themselves.
  *
  * Deliberately evidence-based rather than URL-based: a site is not a category,
@@ -912,6 +1064,12 @@ function inferResultKind(items: ResultItem[]): ResultKind {
   const withLocation = share((i) => Boolean(i.meta.location));
   const withReviews = share((i) => Boolean(i.meta.reviews));
   const withViews = share((i) => Boolean(i.meta.views));
+
+  /* A parsed itinerary is the least ambiguous signal there is — nothing else
+     produces one — so it is asked first. Without this a flight reads as a
+     product (a picture and a fare) or, when the fare fails to parse, as an
+     article (a date and no price). */
+  if (share((i) => i.attributes.some((a) => a.label === 'Route')) >= 0.5) return 'flight';
 
   // Order matters: the more specific signals get first refusal.
   if (withDuration >= 0.5 && withImage >= 0.5) return 'video';
@@ -1520,7 +1678,7 @@ export async function extractOutput(page: Page, opts: ExtractOptions): Promise<R
     .toLowerCase();
 
   // Honest empty state beats a confident empty list.
-  const emptyHit = spec.emptyStateHints.find((h) => h && bodyText.includes(h.toLowerCase()));
+  const emptyHit = spec.emptyStateHints.find((h) => h && saysHint(bodyText, h));
 
   /* The same phrase, but where the page is *announcing* it.
    *
@@ -1546,7 +1704,7 @@ export async function extractOutput(page: Page, opts: ExtractOptions): Promise<R
       .catch(() => '')
   ).toLowerCase();
 
-  const announcedEmpty = spec.emptyStateHints.find((h) => h && announced.includes(h.toLowerCase()));
+  const announcedEmpty = spec.emptyStateHints.find((h) => h && saysHint(announced, h));
 
   /* Sites hand automated visitors a soft error page rather than a block: eBay's
      "Sorry — something went wrong on our end", a bare 500, a "page not found".
@@ -1697,9 +1855,14 @@ export async function extractOutput(page: Page, opts: ExtractOptions): Promise<R
       const title = r.title || `Result ${collected.length + 1}`;
       if (title.length < 2 || title.length > 300) continue;
 
-      // The same item can appear on two pages; the URL is the identity when
-      // there is one, the title otherwise.
-      const fingerprint = (r.url || title).toLowerCase();
+      /* The same item can appear on two pages, so each one is remembered by
+         what identifies it. A URL does that outright. A title alone does not:
+         ten GoZayaan flight cards are ten different itineraries all headed
+         "Qatar Airways", and deduplicating on the heading threw seven of them
+         away. Where there is no link, identity is the card's own content. */
+      const fingerprint = (
+        r.url || `${title}|${r.priceText ?? ''}|${r.text.slice(0, 200)}`
+      ).toLowerCase();
       if (fingerprints.has(fingerprint)) continue;
 
       /* Promo strips and notices share the result class on many shops ("We're
@@ -1713,11 +1876,18 @@ export async function extractOutput(page: Page, opts: ExtractOptions): Promise<R
       const lower = r.text.toLowerCase();
       const unavailableHit = unavailableHints.find((h) => h && lower.includes(h));
 
+      /* An itinerary card is headed with the airline and nothing else, so the
+         route goes into the title where it can be told apart from the nine
+         other cards the same airline is selling, and the legs become facts
+         instead of loose lines in the description. */
+      const itinerary = readItinerary(r.lines ?? []);
+      const heading = itinerary ? `${itinerary.route} · ${title}` : title;
+
       collected.push({
         id: `item_${collected.length}`,
-        title,
-        subtitle: r.subtitle,
-        description: r.description,
+        title: heading,
+        subtitle: itinerary ? title : r.subtitle,
+        description: itinerary ? undefined : r.description,
         image: r.image,
         url: r.url,
         price: parsePrice(r.priceText),
@@ -1728,7 +1898,9 @@ export async function extractOutput(page: Page, opts: ExtractOptions): Promise<R
           Object.entries(r.meta ?? {}).filter(([, v]) => typeof v === 'string' && v.trim()),
         ),
         badges: r.badges ?? [],
-        attributes: (r.attributes ?? []).filter((a) => a.value),
+        attributes: itinerary
+          ? [{ label: 'Route', value: itinerary.route }, ...itinerary.legs]
+          : (r.attributes ?? []).filter((a) => a.value),
         page: pageIndex + 1,
         unavailable: Boolean(unavailableHit),
         unavailableReason: unavailableHit ? `Site says: “${unavailableHit}”` : undefined,

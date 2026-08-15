@@ -27,6 +27,7 @@ const KIND_PRESENTATION: Record<
 > = {
   video: { noun: ['video', 'videos'], grid: 'gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3' },
   stay: { noun: ['stay', 'stays'], grid: 'gap-3 grid-cols-1' },
+  flight: { noun: ['flight', 'flights'], grid: 'gap-2.5 grid-cols-1' },
   product: { noun: ['product', 'products'], grid: 'gap-4 grid-cols-2 lg:grid-cols-4' },
   article: { noun: ['article', 'articles'], grid: 'gap-2 grid-cols-1' },
   discussion: { noun: ['thread', 'threads'], grid: 'gap-1.5 grid-cols-1' },
@@ -177,6 +178,8 @@ function ResultCard({ item, kind }: { item: ResultItem; kind: ResultKind }) {
     case 'stay':
     case 'place':
       return <StayCard item={item} />;
+    case 'flight':
+      return <FlightCard item={item} />;
     case 'product':
       return <ProductCard item={item} />;
     case 'article':
@@ -458,6 +461,76 @@ function StayCard({ item }: { item: ResultItem }) {
             {item.price.formatted}
           </div>
           <div className="mt-1 text-[11px] text-ink-400">total shown</div>
+        </div>
+      )}
+    </Shell>
+  );
+}
+
+/* ── flights ──────────────────────────────────────────────────────────── */
+
+/**
+ * An itinerary, laid out the way one is read.
+ *
+ * The route and the fare are what you scan; the legs are what you check once
+ * something catches your eye. Every card on a flight results page carries the
+ * same airline logo and the same heading, so neither of those can be the thing
+ * that distinguishes one row from the next — the times have to be on the card.
+ */
+function FlightCard({ item }: { item: ResultItem }) {
+  const route = item.attributes.find((a) => a.label === 'Route')?.value;
+  const legs = item.attributes.filter((a) => a.label !== 'Route');
+
+  return (
+    <Shell
+      item={item}
+      className="lift flex gap-4 rounded-[18px] border border-sand-200 bg-white/80 p-4"
+    >
+      <div className="size-10 shrink-0 overflow-hidden rounded-[10px] border border-sand-200 bg-white">
+        <ResultImage
+          src={item.image}
+          className="size-full object-contain p-1"
+          fallback={
+            <div className="flex size-full items-center justify-center text-[10px] text-ink-300">
+              ✈
+            </div>
+          }
+        />
+      </div>
+
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+        <div className="flex flex-wrap items-baseline gap-x-2">
+          <h4 className="font-display text-[17px] leading-none text-ink-900">
+            {route ?? item.title}
+          </h4>
+          {item.subtitle && <span className="text-[12.5px] text-ink-500">{item.subtitle}</span>}
+        </div>
+
+        {legs.map((leg) => (
+          <div key={leg.label} className="flex flex-wrap items-baseline gap-x-2 text-[13px]">
+            <span className="w-[62px] shrink-0 text-[11px] font-medium uppercase tracking-wider text-ink-400">
+              {leg.label}
+            </span>
+            <span className="tabular-nums text-ink-700">{leg.value}</span>
+          </div>
+        ))}
+
+        <div className="flex flex-wrap items-center gap-1.5 empty:hidden">
+          <UnavailableTag item={item} />
+          {item.badges.slice(0, 3).map((b) => (
+            <Badge key={b} tone="outline">
+              {b}
+            </Badge>
+          ))}
+        </div>
+      </div>
+
+      {item.price && (
+        <div className="shrink-0 self-center text-right">
+          <div className="font-display text-xl leading-none text-ember-600">
+            {item.price.formatted}
+          </div>
+          <div className="mt-1 text-[11px] text-ink-400">from</div>
         </div>
       )}
     </Shell>

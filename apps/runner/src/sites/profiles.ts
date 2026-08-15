@@ -83,7 +83,7 @@ const flightFields = (): FormField[] => [
 
 const flightOutput = (itemLocator: string): OutputSpec => ({
   layout: 'cards',
-  resultKind: 'generic',
+  resultKind: 'flight',
   itemLocator,
   itemLocatorPinned: true,
   fields: [],

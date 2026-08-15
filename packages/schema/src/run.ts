@@ -62,6 +62,7 @@ export type RunEvent = z.infer<typeof RunEvent>;
 export const ResultKind = z.enum([
   'video',
   'stay',
+  'flight',
   'product',
   'article',
   'discussion',
