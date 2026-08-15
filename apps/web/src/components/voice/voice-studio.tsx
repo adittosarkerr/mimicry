@@ -106,8 +106,8 @@ export function VoiceStudio() {
     // Brave ships the Web Speech API but blocks the backend it needs, so the
     // failure only shows up after someone has already spoken. Check whether the
     // runner can transcribe instead, and say so before they bother.
-    void fetch(`${RUNNER_URL}/health`)
-      .then((r) => r.json() as Promise<{ stt?: string | false }>)
+    void api
+      .capabilities()
       .then((h) => setSttReady(Boolean(h.stt)))
       .catch(() => setSttReady(false));
 
@@ -250,15 +250,10 @@ export function VoiceStudio() {
 
     setStage('transcribing');
     try {
-      const res = await fetch(`${RUNNER_URL}/api/voice/transcribe`, {
-        method: 'POST',
-        headers: { 'content-type': 'audio/wav' },
-        body: blob,
-      });
-      const body = (await res.json()) as { transcript?: string; error?: string };
-      if (!res.ok || !body.transcript) throw new Error(body.error ?? 'Transcription failed.');
-      setTranscript(body.transcript);
-      await buildPlanRef.current?.(body.transcript);
+      const { transcript: heard } = await api.transcribe(blob);
+      if (!heard) throw new Error('Nothing could be made out of that recording.');
+      setTranscript(heard);
+      await buildPlanRef.current?.(heard);
     } catch (e) {
       setError((e as Error).message);
       setStage('idle');
@@ -306,16 +301,7 @@ export function VoiceStudio() {
       setError(null);
 
       try {
-        const res = await fetch(`${RUNNER_URL}/api/voice/plan`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ transcript: clean, ownerId: user?.id }),
-        });
-        if (!res.ok) {
-          const body = (await res.json().catch(() => ({}))) as { error?: string };
-          throw new Error(body.error ?? `Planning failed (${res.status})`);
-        }
-        const next = (await res.json()) as VoicePlan;
+        const next = await api.voicePlan<VoicePlan>(clean, user?.id);
         setPlan(next);
 
         // Seed the editable values with the automation's own defaults, then
@@ -353,11 +339,22 @@ export function VoiceStudio() {
     try {
       // The spoken request travels with the run so the results can be answered,
       // not just listed — "which is the best value" needs a sentence back.
-      const { runId } = await api.startRun(
+      const started = await api.startRun(
         plan.automationId,
         { ...values, __request: transcript },
         { userId: user?.id },
       );
+      const runId = started.runId;
+
+      /* Already finished — a serverless run has no socket to follow. */
+      if (started.run) {
+        setEvents(started.run.events ?? []);
+        setRun(started.run);
+        setStatus(started.run.status);
+        setStage('done');
+        return;
+      }
+
       streamRef.current = streamRun(runId, {
         onEvent: (event) => {
           setEvents((prev) => [...prev, event]);

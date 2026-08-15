@@ -9,17 +9,17 @@ import type {
   RunOutput,
   RunPhase,
 } from '@mimic/schema';
-import { config } from '../config.js';
-import { saveScreenshot } from '../store.js';
-import { detectWall, launchSession, settle, waitOutChallenge, type Session } from './browser.js';
-import { describeTarget, resolve } from './resolve.js';
-import { pickDate } from './calendar.js';
-import { fillCombobox } from './combobox.js';
-import { setStepper } from './stepper.js';
-import { extractOutput, looksLikeNavigation, waitForContent } from './extract.js';
-import { normalizeTrace } from './normalize.js';
-import { inferUrlTemplate } from '../compile/heuristics.js';
-import { profileFor } from '../sites/profiles.js';
+import { config } from '../config';
+import { saveScreenshot } from '../store';
+import { detectWall, launchSession, settle, waitOutChallenge, type Session } from './browser';
+import { describeTarget, resolve } from './resolve';
+import { pickDate } from './calendar';
+import { fillCombobox } from './combobox';
+import { setStepper } from './stepper';
+import { extractOutput, looksLikeNavigation, waitForContent } from './extract';
+import { normalizeTrace } from './normalize';
+import { inferUrlTemplate } from '../compile/heuristics';
+import { profileFor } from '../sites/profiles';
 
 /** `level` defaults to info, so callers only set it when it isn't. */
 export type Emit = (

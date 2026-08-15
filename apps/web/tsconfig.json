@@ -13,7 +13,8 @@
     "paths": {
       "@/*": ["./src/*"],
       "@mimic/schema": ["../../packages/schema/src/index.ts"],
-      "@mimic/core": ["../../packages/core/src/index.ts"]
+      "@mimic/core": ["../../packages/core/src/index.ts"],
+      "@mimic/runner/serverless": ["../runner/src/serverless.ts"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

@@ -64,23 +64,15 @@ export class ApiError extends Error {
 }
 
 /**
- * The things that genuinely need the runner.
+ * The few things only the runner can serve.
  *
- * Everything else — the library, the marketplace, the account, the sandbox — is
- * records and rules, and the site can serve those from its own API routes when
- * no runner is reachable. Recording, running and voice cannot be faked, so they
- * are never retried here; a request that quietly did nothing would be worse
- * than one that failed.
+ * Everything else the site can answer for itself — including running an
+ * automation, which happens in a serverless function with a Chromium built for
+ * one. What is left are the two that stream bytes it does not hold (a
+ * screenshot on the runner's own disk, an image proxied from a scraped site),
+ * the debug extractor, and its bare `/health`, which has no counterpart here.
  */
-const NEEDS_THE_RUNNER = [
-  /^\/api\/automations\/[^/]+\/(run|recompile)/,
-  /^\/api\/voice/,
-  /^\/api\/ingest/,
-  /^\/api\/screenshots/,
-  /^\/api\/image/,
-  /^\/api\/debug/,
-  /^\/health/,
-];
+const NEEDS_THE_RUNNER = [/^\/api\/screenshots/, /^\/api\/image/, /^\/api\/debug/, /^\/health$/];
 
 /**
  * Whether the runner answered last time we tried.
@@ -148,6 +140,18 @@ export const api = {
   health: () =>
     request<{ ok: boolean; ai: string; headless: boolean; activeRuns: number }>('/health'),
 
+  /**
+   * What this backend can actually do, whichever one answers.
+   *
+   * Asked before someone speaks rather than after: Brave ships the Web Speech
+   * API and blocks the backend it needs, so without this the failure only
+   * appears once they have already said their piece.
+   */
+  capabilities: () =>
+    request<{ ok: boolean; ai: string | false; stt: string | false; browser: boolean }>(
+      '/api/health',
+    ),
+
   listAutomations: (ownerId?: string) =>
     request<AutomationSummary[]>(`/api/automations${ownerId ? `?ownerId=${encodeURIComponent(ownerId)}` : ''}`),
 
@@ -160,13 +164,20 @@ export const api = {
 
   deleteAutomation: (id: string) => request<{ ok: boolean }>(`/api/automations/${id}`, { method: 'DELETE' }),
 
-  /** Kicks off a run and returns immediately; follow it with `streamRun`. */
+  /**
+   * Kicks off a run.
+   *
+   * The runner answers immediately with an id to follow over the websocket.
+   * This site, having no socket to offer, runs it to completion and answers
+   * with the finished run — so `run` being present means there is nothing to
+   * stream and the results are already here.
+   */
   startRun: (
     id: string,
     values: Record<string, unknown>,
     opts?: { headful?: boolean; userId?: string },
   ) =>
-    request<{ runId: string; status: string }>(
+    request<{ runId: string; status: string; run?: Run }>(
       `/api/automations/${id}/run${opts?.headful ? '?headful=1' : ''}`,
       {
         method: 'POST',
@@ -177,6 +188,26 @@ export const api = {
     ),
 
   getRun: (runId: string) => request<Run>(`/api/runs/${runId}`),
+
+  /* ── voice ──────────────────────────────────────────────────────────────
+     Routed through the same client as everything else rather than fetched
+     directly. Going straight to the runner is why the voice page answered a
+     missing backend with the browser's own "Failed to fetch" — three words
+     naming neither what failed nor what to do — while every other page
+     explained itself. */
+
+  transcribe: (audio: Blob, mimeType = 'audio/wav') =>
+    request<{ transcript: string; heard?: string }>('/api/voice/transcribe', {
+      method: 'POST',
+      headers: { 'content-type': mimeType },
+      body: audio,
+    }),
+
+  voicePlan: <T>(transcript: string, ownerId?: string) =>
+    request<T>('/api/voice/plan', {
+      method: 'POST',
+      body: JSON.stringify({ transcript, ownerId }),
+    }),
 
   listRuns: (automationId?: string, limit = 20) =>
     request<Run[]>(

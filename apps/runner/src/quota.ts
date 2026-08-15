@@ -1,6 +1,6 @@
 import { createQuota } from '@mimic/core';
-import { config } from './config.js';
-import { store } from './store.js';
+import { config } from './config';
+import { store } from './store';
 
 /**
  * The free plan's daily allowance, bound to this runner's store.

@@ -23,8 +23,15 @@ const nextConfig: NextConfig = {
    * will not reach outside it. Set NEXT_DIST_DIR in that case. */
   distDir: process.env.NEXT_DIST_DIR || '.next',
   reactStrictMode: true,
-  // The shared schema package ships TypeScript source, not a build.
-  transpilePackages: ['@mimic/schema'],
+  // These workspace packages ship TypeScript source, not a build.
+  transpilePackages: ['@mimic/schema', '@mimic/core', '@mimic/runner'],
+  /* Left for Node to require at runtime rather than bundled.
+   *
+   * Playwright resolves driver scripts and a browser binary by path at run
+   * time, and @sparticuz/chromium carries a compressed Chromium as a file. A
+   * bundler that inlines either produces a module that looks fine and cannot
+   * find its own browser. */
+  serverExternalPackages: ['playwright', 'playwright-core', '@sparticuz/chromium'],
   images: {
     // Scraped results link out to arbitrary sites, so remote images are
     // proxied rather than optimised against a fixed allowlist.

@@ -11,12 +11,12 @@ import {
   type Run,
   type UserProfile,
 } from '@mimic/schema';
-import { config, originAllowed } from './config.js';
-import { compileBaseline, compileTrace } from './compile/index.js';
-import { harvestFields } from './compile/harvest.js';
-import { runAutomation } from './replay/engine.js';
-import { markFinished, publish, subscribe } from './bus.js';
-import { withSlot, activeRuns, queueDepth } from './queue.js';
+import { config, originAllowed } from './config';
+import { compileBaseline, compileTrace } from './compile/index';
+import { harvestFields } from './compile/harvest';
+import { runAutomation } from './replay/engine';
+import { markFinished, publish, subscribe } from './bus';
+import { withSlot, activeRuns, queueDepth } from './queue';
 import {
   planFromTranscript,
   repairHostnames,
@@ -24,12 +24,12 @@ import {
   sameHost,
   sitesNamedIn,
   transcribeAudio,
-} from './voice.js';
-import { authorAutomation, type KnownTemplate } from './authoring.js';
-import { isLocalSttWarm, warmLocalStt } from './stt-local.js';
-import { normalizeTrace } from './replay/normalize.js';
-import { extractOutput, listRegionCandidates } from './replay/extract.js';
-import { launchSession, settle, waitOutChallenge } from './replay/browser.js';
+} from './voice';
+import { authorAutomation, type KnownTemplate } from './authoring';
+import { isLocalSttWarm, warmLocalStt } from './stt-local';
+import { normalizeTrace } from './replay/normalize';
+import { extractOutput, listRegionCandidates } from './replay/extract';
+import { launchSession, settle, waitOutChallenge } from './replay/browser';
 import {
   deleteAutomation,
   get as getRecord,
@@ -44,7 +44,7 @@ import {
   saveAutomation,
   saveRun,
   storeBackend,
-} from './store.js';
+} from './store';
 import {
   GATEWAYS,
   SANDBOX_NOTICE,
@@ -59,9 +59,9 @@ import {
   setDefaultMethod,
   subscribe as subscribeToListing,
   verifyOtp,
-} from './billing.js';
-import { PLANS, checkQuota, quotaFor, recordRun } from './quota.js';
-import { answerFromResults } from './answer.js';
+} from './billing';
+import { PLANS, checkQuota, quotaFor, recordRun } from './quota';
+import { answerFromResults } from './answer';
 
 const app = express();
 app.use(express.json({ limit: '32mb' })); // traces carry full-page HTML
@@ -114,6 +114,28 @@ app.get('/health', (_req, res) => {
     headless: config.browser.headless,
     activeRuns: activeRuns(),
     queued: queueDepth(),
+  });
+});
+
+/* The same answer under the path the deployed site uses.
+ *
+ * The web app asks one question — "what can whichever backend I'm talking to
+ * actually do" — and it should not have to know which of two shapes of URL to
+ * ask it at. */
+app.get('/api/health', (_req, res) => {
+  res.json({
+    ok: true,
+    ai: config.deepseek.enabled ? config.deepseek.model : false,
+    /* Which transcriber, not merely whether. `stt.model` has a default even
+       when no hosted key is set, so asking it first reports a service that
+       isn't there while the local model does the work. */
+    stt: config.stt.enabled
+      ? config.stt.model
+      : config.stt.localEnabled
+        ? `${config.stt.localModel} (local)`
+        : false,
+    browser: true,
+    store: storeBackend,
   });
 });
 

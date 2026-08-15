@@ -33,9 +33,17 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-/** Runs, recordings and voice. Answered honestly rather than badly. */
-const NEEDS_A_BROWSER =
-  'This part of Mimicry drives a real browser, which this site cannot do on its own. Deploy the runner (see DEPLOYING.md) and set NEXT_PUBLIC_RUNNER_URL, and recording, running and voice all start working.';
+/**
+ * The few that still belong to the runner.
+ *
+ * Runs, recordings and voice have their own routes now and really do drive a
+ * browser here. What is left are the two that stream bytes rather than JSON —
+ * a screenshot the runner holds on its own disk, and an image proxied from
+ * whatever site a result came from — plus the debug extractor, which is a
+ * development tool and has no business on a public deployment.
+ */
+const RUNNER_ONLY =
+  'This one is served by the runner. Deploy it (see DEPLOYING.md) and set NEXT_PUBLIC_RUNNER_URL.';
 
 const json = (body: unknown, status = 200) =>
   Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
@@ -71,16 +79,8 @@ async function handle(req: Request, params: { path: string[] }, method: string):
     return json({ gateways: GATEWAYS, notice: SANDBOX_NOTICE });
   }
 
-  if (
-    at(0) === 'ingest' ||
-    at(0) === 'voice' ||
-    at(0) === 'debug' ||
-    at(0) === 'image' ||
-    at(0) === 'screenshots' ||
-    (at(0) === 'automations' && at(2) === 'run') ||
-    (at(0) === 'automations' && at(2) === 'recompile')
-  ) {
-    return fail(NEEDS_A_BROWSER, 503);
+  if (at(0) === 'debug' || at(0) === 'image' || at(0) === 'screenshots') {
+    return fail(RUNNER_ONLY, 503);
   }
 
   if (!store || !billing || !library || !quota) return fail(unavailableReason(), 503);

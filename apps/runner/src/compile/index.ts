@@ -1,8 +1,8 @@
 import type { FormField, FormSchema, RecordedStep, Trace } from '@mimic/schema';
-import { chatJson, DeepSeekError } from '../deepseek.js';
-import { config } from '../config.js';
-import { compileHeuristically, inferCategory, slug } from './heuristics.js';
-import { condenseHtml, guessResultContainers } from './dom.js';
+import { chatJson, DeepSeekError } from '../deepseek';
+import { config } from '../config';
+import { compileHeuristically, inferCategory, slug } from './heuristics';
+import { condenseHtml, guessResultContainers } from './dom';
 
 /**
  * Trace → FormSchema.

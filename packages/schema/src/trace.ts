@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ElementLocator } from './locator.js';
+import { ElementLocator } from './locator';
 
 /**
  * What kind of control the user actually touched. The recorder infers this from

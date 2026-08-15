@@ -1,6 +1,6 @@
 import type { Locator, Page } from 'playwright';
 import type { RecordedStep } from '@mimic/schema';
-import { resolve } from './resolve.js';
+import { resolve } from './resolve';
 
 /**
  * Date picking.

@@ -70,9 +70,20 @@ export function AutomationDetail({ id, isNew }: { id: string; isNew?: boolean })
     streamRef.current?.close();
 
     try {
-      const { runId: newRunId } = await api.startRun(automation.id, values, { userId: user?.id });
+      const started = await api.startRun(automation.id, values, { userId: user?.id });
+      const newRunId = started.runId;
       setRunId(newRunId);
       setStatus('running');
+
+      /* Already finished. A serverless run has no socket to follow — it ran
+         inside the request and came back whole — so opening one would wait for
+         events that were emitted before this line executed. */
+      if (started.run) {
+        setEvents(started.run.events ?? []);
+        setRun(started.run);
+        setStatus(started.run.status);
+        return;
+      }
 
       streamRef.current = streamRun(newRunId, {
         onEvent: (event) => {

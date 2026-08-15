@@ -1,4 +1,4 @@
-import { config } from './config.js';
+import { config } from './config';
 
 /**
  * Tiny concurrency gate. Each replay owns a whole Chromium instance, so a

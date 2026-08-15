@@ -1,8 +1,8 @@
 import type { ControlKind, FormField, FormSchema, Trace } from '@mimic/schema';
-import { launchSession, settle, waitOutChallenge } from '../replay/browser.js';
-import { dismissConsent } from '../replay/engine.js';
-import { waitForContent } from '../replay/extract.js';
-import { slug } from './heuristics.js';
+import { launchSession, settle, waitOutChallenge } from '../replay/browser';
+import { dismissConsent } from '../replay/engine';
+import { waitForContent } from '../replay/extract';
+import { slug } from './heuristics';
 
 /**
  * Fields the recording never contained.

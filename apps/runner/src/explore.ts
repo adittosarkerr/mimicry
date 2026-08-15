@@ -1,12 +1,12 @@
 import { nanoid } from 'nanoid';
 import type { Page } from 'playwright';
 import type { ControlKind, ElementLocator, FormField, RecordedStep } from '@mimic/schema';
-import { chatJson } from './deepseek.js';
-import { launchSession, settle, waitOutChallenge } from './replay/browser.js';
-import { dismissConsent } from './replay/engine.js';
-import { waitForContent } from './replay/extract.js';
-import { readSteppers, setStepper } from './replay/stepper.js';
-import { setDate } from './replay/calendar.js';
+import { chatJson } from './deepseek';
+import { launchSession, settle, waitOutChallenge } from './replay/browser';
+import { dismissConsent } from './replay/engine';
+import { waitForContent } from './replay/extract';
+import { readSteppers, setStepper } from './replay/stepper';
+import { setDate } from './replay/calendar';
 
 /**
  * Working out how to do a task by opening the site and looking at it.

@@ -1,6 +1,45 @@
-import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
-import { config } from '../config.js';
+import type { Browser, BrowserContext, LaunchOptions, Page } from 'playwright';
+import { config } from '../config';
 import type { Trace } from '@mimic/schema';
+
+/**
+ * Where Chromium comes from.
+ *
+ * On a laptop or a container it is the one Playwright installed, and this whole
+ * question never comes up. In a serverless function there is no such Chromium
+ * and no way to install one — the filesystem is read-only and the bundle has a
+ * size limit — so a build compiled for exactly that runs instead, unpacked into
+ * /tmp on first use.
+ *
+ * Imported dynamically rather than at the top, so a machine that has a real
+ * Playwright never loads a 50MB dependency it will not use, and a deployment
+ * that has neither still starts and says which one is missing.
+ */
+const serverless = process.env.MIMIC_SERVERLESS_BROWSER === '1' || Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
+
+type Launch = (options?: LaunchOptions) => Promise<Browser>;
+
+async function launcher(): Promise<{ launch: Launch; args: string[]; executablePath?: string }> {
+  if (!serverless) {
+    const { chromium } = await import('playwright');
+    return { launch: chromium.launch.bind(chromium) as Launch, args: LAUNCH_ARGS };
+  }
+
+  const [{ chromium: core }, sparticuz] = await Promise.all([
+    import('playwright-core'),
+    import('@sparticuz/chromium'),
+  ]);
+  const pack = sparticuz.default;
+
+  return {
+    launch: core.launch.bind(core) as Launch,
+    /* Its own flags first: they are what make Chromium start at all inside a
+       function — single process, no /dev/shm, software rendering. Ours are
+       about not looking like a robot, which is a separate concern. */
+    args: [...pack.args, ...LAUNCH_ARGS.filter((a) => !pack.args.includes(a))],
+    executablePath: await pack.executablePath(),
+  };
+}
 
 /**
  * Browser lifecycle + anti-automation hardening.
@@ -87,11 +126,16 @@ function sensibleViewport(recorded?: { width: number; height: number }) {
 }
 
 export async function launchSession(opts: SessionOptions = {}): Promise<Session> {
-  const headless = opts.headless ?? config.browser.headless;
+  /* A serverless function has no screen, so "run it visibly" is not an option
+     there however firmly it is asked for. Quietly honest beats launching
+     something that cannot start. */
+  const headless = serverless ? true : (opts.headless ?? config.browser.headless);
+  const chrome = await launcher();
 
-  const browser = await chromium.launch({
+  const browser = await chrome.launch({
     headless,
-    args: LAUNCH_ARGS,
+    args: chrome.args,
+    executablePath: chrome.executablePath,
     chromiumSandbox: false,
   });
 

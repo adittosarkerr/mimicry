@@ -1,5 +1,5 @@
 import type { FormField, OutputSpec } from '@mimic/schema';
-import { toAirportCode } from './airports.js';
+import { toAirportCode } from './airports';
 
 /**
  * Known sites, described once and properly.

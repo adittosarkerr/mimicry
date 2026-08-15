@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { FormSchema } from './form.js';
-import { Trace } from './trace.js';
+import { FormSchema } from './form';
+import { Trace } from './trace';
 
 export const Automation = z.object({
   id: z.string(),

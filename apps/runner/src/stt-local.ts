@@ -1,4 +1,4 @@
-import { config } from './config.js';
+import { config } from './config';
 
 /**
  * Speech-to-text with no API key and no network provider.

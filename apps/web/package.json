@@ -24,7 +24,10 @@
     "react-dom": "^19.0.0",
     "tailwind-merge": "^2.6.0",
     "zod": "^3.24.1",
-    "@mimic/core": "*"
+    "@mimic/core": "*",
+    "@mimic/runner": "*",
+    "@sparticuz/chromium": "^149.0.0",
+    "playwright-core": "^1.62.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",

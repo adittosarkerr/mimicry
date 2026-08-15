@@ -1,8 +1,8 @@
-export * from './locator.js';
-export * from './trace.js';
-export * from './form.js';
-export * from './run.js';
-export * from './automation.js';
+export * from './locator';
+export * from './trace';
+export * from './form';
+export * from './run';
+export * from './automation';
 
 /** Wire protocol between extension → runner. */
 export const INGEST_PATH = '/api/ingest';

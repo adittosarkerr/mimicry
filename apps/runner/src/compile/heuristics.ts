@@ -6,7 +6,7 @@ import type {
   RecordedStep,
   Trace,
 } from '@mimic/schema';
-import { profileFor } from '../sites/profiles.js';
+import { profileFor } from '../sites/profiles';
 
 /**
  * Rule-based trace → form compiler.

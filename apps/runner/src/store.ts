@@ -6,7 +6,7 @@ import {
   type Collection as CoreCollection,
   type Store,
 } from '@mimic/core';
-import { config } from './config.js';
+import { config } from './config';
 import type { Automation, Run } from '@mimic/schema';
 
 /**

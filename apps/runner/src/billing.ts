@@ -1,5 +1,5 @@
 import { createBilling } from '@mimic/core';
-import { store } from './store.js';
+import { store } from './store';
 
 /**
  * The payment sandbox, bound to whichever store this runner is using.

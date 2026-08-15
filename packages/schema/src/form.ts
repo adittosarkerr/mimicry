@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { ControlKind, SelectOption } from './trace.js';
-import { ResultKind } from './run.js';
+import { ControlKind, SelectOption } from './trace';
+import { ResultKind } from './run';
 
 /**
  * A field in the generated form. One field can drive several recorded steps —

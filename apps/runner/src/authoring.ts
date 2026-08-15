@@ -7,12 +7,12 @@ import type {
   RecordedStep,
   Trace,
 } from '@mimic/schema';
-import { chatJson } from './deepseek.js';
-import { config } from './config.js';
-import { detectWall, launchSession, settle, waitOutChallenge } from './replay/browser.js';
-import { extractOutput } from './replay/extract.js';
-import { runAutomation } from './replay/engine.js';
-import { exploreSite } from './explore.js';
+import { chatJson } from './deepseek';
+import { config } from './config';
+import { detectWall, launchSession, settle, waitOutChallenge } from './replay/browser';
+import { extractOutput } from './replay/extract';
+import { runAutomation } from './replay/engine';
+import { exploreSite } from './explore';
 
 /**
  * Authoring automations from a description, with no recording.

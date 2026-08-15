@@ -1,6 +1,6 @@
 import type { RunOutput } from '@mimic/schema';
-import { chatJson } from './deepseek.js';
-import { config } from './config.js';
+import { chatJson } from './deepseek';
+import { config } from './config';
 
 /**
  * Reading the results and saying something about them.

@@ -1,4 +1,4 @@
-import { config } from './config.js';
+import { config } from './config';
 
 /**
  * Thin DeepSeek client. The API is OpenAI-compatible, so this is just

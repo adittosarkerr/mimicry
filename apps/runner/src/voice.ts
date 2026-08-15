@@ -1,7 +1,7 @@
 import type { Automation, FormField } from '@mimic/schema';
-import { chatJson } from './deepseek.js';
-import { config } from './config.js';
-import { transcribeLocally } from './stt-local.js';
+import { chatJson } from './deepseek';
+import { config } from './config';
+import { transcribeLocally } from './stt-local';
 
 /**
  * Voice → plan.
