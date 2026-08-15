@@ -1,0 +1,192 @@
+@import 'tailwindcss';
+
+/* ───────────────────────────────────────────────────────────────
+   Mimic design tokens.
+
+   One warm neutral ramp (sand), one accent (ember), and nothing
+   else. Everything reads as the same surface lit from the same
+   angle, which is what makes an interface feel designed rather
+   than assembled.
+   ─────────────────────────────────────────────────────────────── */
+@theme {
+  --color-sand-50: #fdfaf5;
+  --color-sand-100: #f9f1e6;
+  --color-sand-200: #f2e5d3;
+  --color-sand-300: #e7d3b8;
+  --color-sand-400: #d6b98f;
+  --color-sand-500: #c09b68;
+  --color-sand-600: #a17b4c;
+
+  --color-ink-900: #211710;
+  --color-ink-800: #33251a;
+  --color-ink-700: #4a382a;
+  --color-ink-500: #7a6656;
+  --color-ink-400: #9a8674;
+
+  --color-ember-50: #fff7ed;
+  --color-ember-100: #ffedd5;
+  --color-ember-200: #fed7aa;
+  --color-ember-300: #fdba74;
+  --color-ember-400: #fb923c;
+  --color-ember-500: #f97316;
+  --color-ember-600: #ea580c;
+  --color-ember-700: #c2410c;
+
+  --color-moss-500: #4d7c0f;
+  --color-moss-100: #ecfccb;
+  --color-rust-500: #b91c1c;
+  --color-rust-100: #fee2e2;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: var(--font-display), Georgia, 'Times New Roman', serif;
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', 'JetBrains Mono', Consolas, monospace;
+
+  --radius-card: 18px;
+
+  /* One easing for entrances, one for exits. Consistency reads as intent. */
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-soft: cubic-bezier(0.55, 0, 0.68, 0.28);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-sand-200);
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background: var(--color-sand-50);
+    color: var(--color-ink-900);
+    font-family: var(--font-sans);
+    /* A barely-there warm wash keeps large empty areas from going flat. */
+    background-image:
+      radial-gradient(60rem 40rem at 85% -10%, rgba(249, 115, 22, 0.07), transparent 60%),
+      radial-gradient(50rem 35rem at 5% 5%, rgba(214, 185, 143, 0.16), transparent 55%);
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    background: var(--color-ember-200);
+    color: var(--color-ink-900);
+  }
+
+  /* One focus ring everywhere, on the accent, never removed. */
+  :focus-visible {
+    outline: 2px solid var(--color-ember-500);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  h1, h2, h3 {
+    letter-spacing: -0.022em;
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+}
+
+@layer components {
+  .surface {
+    background: rgba(255, 253, 250, 0.86);
+    border: 1px solid var(--color-sand-200);
+    border-radius: var(--radius-card);
+    backdrop-filter: blur(10px);
+  }
+
+  /* Cards lift on hover — 2px, not 8px. Restraint is the whole point. */
+  .lift {
+    transition:
+      transform 0.28s var(--ease-out-soft),
+      box-shadow 0.28s var(--ease-out-soft),
+      border-color 0.28s var(--ease-out-soft);
+  }
+  .lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 32px -12px rgba(33, 23, 16, 0.18);
+    border-color: var(--color-sand-300);
+  }
+
+  /* The one text-input look, so every form in the app matches the generated
+     one rather than approximating it. Mirrors `inputBase` in dynamic-form. */
+  .input {
+    width: 100%;
+    border-radius: 0.75rem;
+    border: 1px solid var(--color-sand-300);
+    background: #fff;
+    padding: 0.625rem 0.75rem;
+    font-size: 14px;
+    color: var(--color-ink-900);
+    transition: border-color 0.2s var(--ease-out-soft);
+  }
+  .input::placeholder {
+    color: var(--color-ink-400);
+  }
+  .input:focus {
+    border-color: var(--color-ember-400);
+    outline: none;
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-ember-500) 12%, transparent);
+  }
+  .input:disabled {
+    opacity: 0.6;
+  }
+
+  .grain {
+    position: relative;
+  }
+  /* Paper tooth. Very subtle — it should read as texture, not noise. */
+  .grain::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.028;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    mix-blend-mode: multiply;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Marks a value that came from the user's recording rather than the UI. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Scrollbars, warmed to match the surface. */
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-sand-300);
+  border-radius: 999px;
+  border: 3px solid var(--color-sand-50);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-sand-400);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

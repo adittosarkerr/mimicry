@@ -1,0 +1,25 @@
+{
+  "name": "mimic",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Mimic — record any browser task, turn it into an editable form, replay it headlessly.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n web,runner -c yellow,magenta \"npm run dev -w @mimic/web\" \"npm run dev -w @mimic/runner\"",
+    "dev:web": "npm run dev -w @mimic/web",
+    "dev:runner": "npm run dev -w @mimic/runner",
+    "build": "npm run build -w @mimic/web",
+    "typecheck": "tsc -b --pretty",
+    "setup:browsers": "playwright install chromium"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

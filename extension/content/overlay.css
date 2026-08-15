@@ -1,0 +1,6 @@
+/* Overlay styling lives inside a shadow root (see overlay.js) so page CSS can't
+   bleed into it and Mimic's chrome can't bleed into the page. This file exists
+   only to reserve the stylesheet slot in the manifest. */
+[data-mimic-ui] {
+  all: initial;
+}

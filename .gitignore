@@ -1,0 +1,38 @@
+# Secrets — never committed. `.env.example` documents the shape instead.
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Builds
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# Runner state: recordings, runs, screenshots, sandbox billing records.
+# This is user data, and some of it is large.
+apps/runner/.mimic/
+.mimic/
+
+# Test and debug output
+suite-shots/
+*.log
+runner-out.log
+runner-err.log
+
+# Editors and OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Local agent scratch
+.claude/settings.local.json
+scripts/_*

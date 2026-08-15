@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "lib": ["ES2023", "DOM"],
+    "baseUrl": ".",
+    "paths": {
+      "@mimic/schema": ["../../packages/schema/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}

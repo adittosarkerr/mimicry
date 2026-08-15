@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Mimic Recorder</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="head">
+      <div class="mark" aria-hidden="true">
+        <span class="mark-dot"></span>
+        <span class="mark-dot"></span>
+        <span class="mark-dot"></span>
+      </div>
+      <div class="head-text">
+        <h1>Mimic</h1>
+        <p id="site" class="muted">—</p>
+      </div>
+      <button id="settings-toggle" class="icon-btn" type="button" title="Settings" aria-label="Settings">⚙</button>
+    </header>
+
+    <!-- idle -->
+    <section id="view-idle" class="view">
+      <p class="lede">Press record, then do the task once. Mimic turns it into a form you can rerun with different values.</p>
+      <button id="start" class="btn btn-primary" type="button">
+        <span class="rec-dot"></span> Start recording
+      </button>
+      <ul class="tips">
+        <li>Works on any site — search, forms, portals, dashboards, mail.</li>
+        <li>Passwords and card fields are never captured.</li>
+        <li>Finish on the page showing the results you want back.</li>
+      </ul>
+    </section>
+
+    <!-- recording -->
+    <section id="view-recording" class="view" hidden>
+      <div class="live">
+        <span class="rec-dot live-dot"></span>
+        <span class="live-label">Recording</span>
+        <span id="timer" class="live-time">0:00</span>
+      </div>
+      <div class="stat">
+        <span id="step-count" class="stat-num">0</span>
+        <span class="stat-label">steps captured</span>
+      </div>
+      <button id="stop" class="btn btn-primary" type="button">Stop &amp; build automation</button>
+      <button id="discard" class="btn btn-quiet" type="button">Discard</button>
+    </section>
+
+    <!-- naming -->
+    <section id="view-naming" class="view" hidden>
+      <label class="field">
+        <span>Name <em>optional</em></span>
+        <input id="name" type="text" placeholder="Leave blank and Mimic will name it" />
+      </label>
+      <label class="field">
+        <span>Description</span>
+        <textarea id="description" rows="3" placeholder="Searches the catalogue, applies the usual filters, and reads back every result."></textarea>
+      </label>
+      <button id="build" class="btn btn-primary" type="button">Build it</button>
+      <button id="back" class="btn btn-quiet" type="button">Back</button>
+    </section>
+
+    <!-- working -->
+    <section id="view-busy" class="view" hidden>
+      <div class="spinner" aria-hidden="true"></div>
+      <p id="busy-text" class="lede center">Sending your recording to the runner…</p>
+    </section>
+
+    <!-- settings -->
+    <section id="view-settings" class="view" hidden>
+      <label class="field">
+        <span>Runner URL</span>
+        <input id="runnerUrl" type="url" placeholder="http://localhost:8787" />
+      </label>
+      <label class="field">
+        <span>Web app URL</span>
+        <input id="webUrl" type="url" placeholder="http://localhost:3000" />
+      </label>
+      <label class="field">
+        <span>Ingest token</span>
+        <input id="ingestToken" type="text" placeholder="dev-local-token-change-me" />
+      </label>
+      <button id="save-settings" class="btn btn-primary" type="button">Save</button>
+      <button id="close-settings" class="btn btn-quiet" type="button">Close</button>
+    </section>
+
+    <p id="error" class="error" hidden></p>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
