@@ -1,13 +1,19 @@
-# `apps/runner` is NOT ignored, deliberately.
+# Leading slashes matter here.
 #
-# It used to be: the runner is a long-lived Playwright server that cannot run on
-# Vercel, and including it only got it type-checked by a build that would never
-# deploy it. That stopped being true when the site started running automations
-# itself — the engine it runs is the runner's own, imported through
-# `apps/runner/src/serverless.ts`. Excluding the directory removes that file from
-# the build, and the build fails on an import it cannot resolve.
+# These patterns are gitignore-shaped, so a bare `extension` matches a
+# directory of that name at any depth — including `apps/web/src/app/extension`,
+# the page that tells people how to install the recorder. It built fine and
+# 404ed on the deployment, which is a difficult thing to explain from either
+# end. Anchored to the repository root, every one of these means what it looks
+# like it means.
+#
+# `apps/runner` is deliberately absent. It used to be here, on the grounds that
+# a Playwright server cannot run on Vercel and including it only got it
+# type-checked for nothing. That stopped being true when the site started
+# running automations itself: the engine it runs is the runner's own, imported
+# through `apps/runner/src/serverless.ts`.
 
-extension
-scripts
-suite-shots
-supabase
+/extension
+/scripts
+/suite-shots
+/supabase
