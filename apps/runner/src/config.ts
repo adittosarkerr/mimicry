@@ -5,15 +5,25 @@ import path from 'node:path';
 /* Env lives at the repo root so the web app and the runner share one file.
    Looked for relative to the workspace *and* to wherever this was started
    from, because a script run from the repo root otherwise finds nothing and
-   fails with "DEEPSEEK_API_KEY is not set" on a machine where it is set. */
-const roots = [path.resolve(process.cwd(), '../..'), process.cwd()];
-for (const root of roots) {
-  for (const file of ['.env.local', '.env']) {
-    const p = path.join(root, file);
-    if (existsSync(p)) loadEnv({ path: p });
+   fails with "DEEPSEEK_API_KEY is not set" on a machine where it is set.
+
+   Skipped entirely when there is no `.env` file to find, which is every
+   serverless deployment — the platform injects the environment directly.
+   That matters for more than tidiness: a bundler cannot follow a path built
+   at run time, so it gives up and includes the whole project source in every
+   function rather than risk missing a file. With a 67MB browser alongside,
+   that is the difference between a deployment and a size-limit failure.
+   `turbopackIgnore` tells it these reads are ours to worry about. */
+if (!process.env.VERCEL && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  const roots = [path.resolve(/*turbopackIgnore: true*/ process.cwd(), '../..'), process.cwd()];
+  for (const root of roots) {
+    for (const file of ['.env.local', '.env']) {
+      const p = path.join(/*turbopackIgnore: true*/ root, file);
+      if (existsSync(/*turbopackIgnore: true*/ p)) loadEnv({ path: p });
+    }
   }
+  loadEnv();
 }
-loadEnv();
 
 const bool = (v: string | undefined, fallback: boolean) =>
   v === undefined ? fallback : /^(1|true|yes|on)$/i.test(v);
@@ -101,7 +111,11 @@ export const config = {
     humanDelayMs: int(process.env.RUNNER_HUMAN_DELAY_MS, 120),
   },
 
-  storageDir: path.resolve(process.cwd(), process.env.RUNNER_STORAGE_DIR || './.mimic'),
+  /* Only the file store reads this, and only the runner has one. The bundler
+     is told to leave it alone for the same reason as the `.env` lookup above:
+     an unfollowable path makes it trace the entire project into every
+     function. */
+  storageDir: path.resolve(/*turbopackIgnore: true*/ process.cwd(), process.env.RUNNER_STORAGE_DIR || './.mimic'),
 
   /** Origins allowed to talk to the runner (web app + the extension). */
   corsOrigins: (process.env.RUNNER_CORS || 'http://localhost:3000,http://127.0.0.1:3000')
