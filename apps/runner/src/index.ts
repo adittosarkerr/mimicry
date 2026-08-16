@@ -26,6 +26,7 @@ import {
   transcribeAudio,
 } from './voice';
 import { authorAutomation, type KnownTemplate } from './authoring';
+import { filtersInRequest, profileFor } from './sites/profiles';
 import { isLocalSttWarm, warmLocalStt } from './stt-local';
 import { normalizeTrace } from './replay/normalize';
 import { extractOutput, listRegionCandidates } from './replay/extract';
@@ -711,6 +712,7 @@ app.post(
     if (chosen) {
       res.json({
         ...plan,
+        values: filtersFromRequest(chosen.site, transcript, plan.values),
         created: false,
         automation: { id: chosen.id, name: chosen.name, site: chosen.site, emoji: chosen.emoji, schema: chosen.schema },
       });
@@ -746,6 +748,29 @@ app.post(
  * "here is one that worked", which is the difference between refusing a
  * complex request and fulfilling it.
  */
+/**
+ * Filters the request asks for, on a site whose profile knows them.
+ *
+ * The matcher fills a saved automation's fields from the transcript via the
+ * model, and the model is told — correctly — never to invent a filter
+ * parameter. So "the hotel must have a swimming pool" reached a Booking form
+ * with a switch for exactly that and left it off, and the search came back
+ * confidently answering a different question. Read here instead, from the
+ * profile that owns the knowledge, for reused automations as well as newly
+ * authored ones.
+ */
+function filtersFromRequest(
+  site: string,
+  transcript: string,
+  values: Record<string, unknown>,
+): Record<string, unknown> {
+  const profile = profileFor(site);
+  if (!profile?.filters) return values;
+  const asked = filtersInRequest(profile.filters, transcript);
+  if (!asked.length) return values;
+  return { ...values, ...Object.fromEntries(asked.map((key) => [key, true])) };
+}
+
 function knownTemplates(automations: Automation[]): KnownTemplate[] {
   const bySite = new Map<string, KnownTemplate>();
 

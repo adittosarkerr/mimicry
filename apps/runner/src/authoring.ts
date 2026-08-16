@@ -13,7 +13,7 @@ import { detectWall, launchSession, settle, waitOutChallenge } from './replay/br
 import { extractOutput } from './replay/extract';
 import { runAutomation } from './replay/engine';
 import { exploreSite } from './explore';
-import { profileFor, type SiteProfile } from './sites/profiles';
+import { filtersInRequest, profileFor, type SiteProfile } from './sites/profiles';
 
 /**
  * Authoring automations from a description, with no recording.
@@ -472,7 +472,7 @@ export async function authorAutomation(
     const profile = profileFor(result.automation.site);
     if (profile) {
       return {
-        automation: applyProfile(result.automation, profile),
+        automation: applyProfile(result.automation, profile, transcript),
         confidence: Math.max(result.confidence, 0.9),
       };
     }
@@ -554,22 +554,42 @@ export async function authorAutomation(
  * sensibly without knowing the profile's spelling — `checkin` and `check_in`,
  * `guests` and `adults`.
  */
-export function applyProfileForTest(automation: Automation, profile: SiteProfile): Automation {
-  return applyProfile(automation, profile);
+export function applyProfileForTest(
+  automation: Automation,
+  profile: SiteProfile,
+  transcript = '',
+): Automation {
+  return applyProfile(automation, profile, transcript);
 }
 
-function applyProfile(automation: Automation, profile: SiteProfile): Automation {
+function applyProfile(
+  automation: Automation,
+  profile: SiteProfile,
+  transcript: string,
+): Automation {
+  /* What the request itself asks for, read against this site's own filter
+     names. The model is told never to invent a filter parameter, so it leaves
+     them out and "must have a swimming pool" arrives as nothing — the profile
+     knows these, so the profile recognises them. */
+  const asked = new Set(filtersInRequest(profile.filters, transcript));
   const authored = automation.schema.fields;
   const normalise = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
   const has = (f: FormField) => f.defaultValue != null && f.defaultValue !== '';
+  /* Which of the model's fields found a home. Whatever is left over is
+     something the person asked for that this site cannot express, and saying
+     so is the whole point — see below. */
+  const used = new Set<string>();
 
   const valueFor = (key: string, label: string): FormField['defaultValue'] => {
     const want = [normalise(key), normalise(label)];
 
     // Exactly the same name is the strongest signal, so it is asked first.
     const exact = authored.find((f) => want.includes(normalise(f.key)) || want.includes(normalise(f.label)));
-    if (exact && has(exact)) return exact.defaultValue;
+    if (exact && has(exact)) {
+      used.add(exact.key);
+      return exact.defaultValue;
+    }
 
     /* Then by overlap, because the model names things sensibly without knowing
        this site's spelling: `star_rating` for `stars`, `breakfast_included`
@@ -583,6 +603,7 @@ function applyProfile(automation: Automation, profile: SiteProfile): Automation 
       })
       .sort((a, b) => a.key.length - b.key.length)[0];
 
+    if (near) used.add(near.key);
     return near?.defaultValue ?? null;
   };
 
@@ -607,9 +628,38 @@ function applyProfile(automation: Automation, profile: SiteProfile): Automation 
   };
 
   const fields: FormField[] = profile.fields.map((field) => {
+    if (asked.has(field.key)) return { ...field, defaultValue: true };
     const heard = valueFor(field.key, field.label);
     return heard === null || heard === undefined ? field : { ...field, defaultValue: coerce(field, heard) };
   });
+
+  /* What was asked for and cannot be delivered.
+   *
+   * The profile knows this site's real filters — Booking's are read off the
+   * page and checked against it — but nobody's list is complete, and a person
+   * can ask for anything. "Pet friendly", "airport shuttle", "non-stop only":
+   * heard correctly, and then quietly dropped on the way onto the profile,
+   * because a field the profile has no name for had nowhere to go.
+   *
+   * Silently is the problem, not the dropping. A search that ignores half the
+   * request and returns a confident list is indistinguishable from one that
+   * honoured it. So they are kept, shown, and labelled as not applied — the
+   * person can see what was understood and decide whether the results are
+   * worth having. */
+  const unsupported: FormField[] = authored
+    .filter((f) => !used.has(f.key) && has(f))
+    .filter((f) => !fields.some((p) => normalise(p.key) === normalise(f.key)))
+    .slice(0, 6)
+    .map((f, i) => ({
+      ...f,
+      group: 'Not applied',
+      order: 900 + i,
+      required: false,
+      exposure: 'advanced' as const,
+      hint: `Heard, but ${profile.name.replace(/ (search|flight search|hotel search)$/i, '')} has no filter for this — the results are not narrowed by it.`,
+    }));
+
+  fields.push(...unsupported);
 
   return {
     ...automation,

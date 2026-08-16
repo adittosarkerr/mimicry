@@ -21,6 +21,43 @@ import { toAirportCode } from './airports';
  * the URL from the values. Everything else still goes through the generic path.
  */
 
+/**
+ * One thing a person might ask for beyond the basics.
+ *
+ * "Two adults, two rooms" is the shape of every hotel search. "Must have a
+ * swimming pool", "no prepayment", "beachfront" are the reason someone is
+ * searching at all, and dropping them silently returns a page of results that
+ * look right and answer a different question.
+ *
+ * Every `code` here was read off the site and then confirmed by applying it and
+ * watching the result count move. None are remembered or inferred: an invented
+ * filter token does not fail loudly on Booking — it returns an unfiltered page.
+ */
+export interface SiteFilter {
+  key: string;
+  label: string;
+  /** The site's own token, e.g. `hotelfacility=433`. */
+  code: string;
+  /** Roughly how many of ~83 Cox's Bazar properties matched, when checked. */
+  verified: number;
+  /**
+   * How someone says it.
+   *
+   * Read against the spoken request directly rather than asked of the model.
+   * The model is told — correctly — never to invent a filter parameter it is
+   * unsure of, so it leaves these out entirely and "must have a swimming pool"
+   * arrived as nothing at all. The profile is the thing that knows this site's
+   * filters, so the profile is the thing that should recognise them.
+   */
+  match: RegExp;
+}
+
+/** Which of a site's filters a request is asking for. */
+export const filtersInRequest = (
+  filters: SiteFilter[] | undefined,
+  transcript: string,
+): string[] => (filters ?? []).filter((f) => f.match.test(transcript)).map((f) => f.key);
+
 export interface SiteProfile {
   id: string;
   /** Matched against the automation's hostname. */
@@ -29,10 +66,37 @@ export interface SiteProfile {
   category: string;
   emoji: string;
   fields: FormField[];
+  /**
+   * Optional extras, offered as toggles and understood from a spoken request.
+   * Kept apart from `fields` so the form leads with what everyone needs and
+   * keeps the long tail behind "Advanced".
+   */
+  filters?: SiteFilter[];
   output: OutputSpec;
   /** The results URL for these values, or undefined when they can't produce one. */
   buildUrl(values: Record<string, unknown>): string | undefined;
 }
+
+/** A filter as a form field: a toggle, off by default, tucked under Advanced. */
+export const filterField = (f: SiteFilter, order: number): FormField =>
+  field({
+    key: f.key,
+    label: f.label,
+    kind: 'toggle',
+    group: 'Filters',
+    order,
+    exposure: 'advanced',
+    defaultValue: false,
+  });
+
+/** The site's tokens for whichever extras are switched on. */
+export const activeFilters = (
+  filters: SiteFilter[] | undefined,
+  values: Record<string, unknown>,
+): string[] =>
+  (filters ?? [])
+    .filter((f) => values[f.key] === true || values[f.key] === 'true')
+    .map((f) => f.code);
 
 const str = (v: unknown): string => String(v ?? '').trim();
 const num = (v: unknown, fallback: number): number => {
@@ -233,6 +297,46 @@ const KAYAK: SiteProfile = {
  * The site's filters are a `;`-joined bundle, which is the part inference
  * cannot express, so it belongs here with the rest.
  */
+/**
+ * Booking's own filter tokens, each confirmed against the live site.
+ *
+ * `scripts/verify-filters.mts` applies one at a time to the same search and
+ * records how many of the ~83 Cox's Bazar properties survive. A token that is
+ * wrong does not error — Booking ignores it and returns everything — so a
+ * number that moved is the only proof worth having, and the numbers are kept
+ * here so the next person can tell a verified code from a remembered one.
+ */
+const BOOKING_FILTERS: SiteFilter[] = [
+  { key: 'breakfast', label: 'Breakfast included', code: 'mealplan=1', verified: 49,
+    match: /\bbreakfast\b/i },
+  { key: 'free_cancellation', label: 'Free cancellation', code: 'fc=2', verified: 41,
+    match: /\bfree cancel|\bcancel(l?able|lation) (is )?free|\brefundable\b/i },
+  { key: 'no_prepayment', label: 'No prepayment needed', code: 'oos=1', verified: 83,
+    match: /\bno pre-?pay|\bwithout pre-?pay|\bpay (at|on) (the )?(property|arrival|hotel)\b/i },
+  { key: 'swimming_pool', label: 'Swimming pool', code: 'hotelfacility=433', verified: 13,
+    match: /\b(swimming ?)?pool\b/i },
+  { key: 'beachfront', label: 'Beachfront', code: 'hotelfacility=146', verified: 9,
+    match: /\bbeach ?front|\bon the beach\b|\bsea ?front\b/i },
+  { key: 'spa', label: 'Spa and wellness centre', code: 'hotelfacility=54', verified: 10,
+    match: /\bspa\b|\bwellness\b/i },
+  { key: 'parking', label: 'Parking', code: 'hotelfacility=2', verified: 77,
+    match: /\bparking\b|\bcar park\b/i },
+  { key: 'free_wifi', label: 'Free WiFi', code: 'hotelfacility=107', verified: 61,
+    match: /\bwi-?fi\b|\binternet\b/i },
+  { key: 'air_conditioning', label: 'Air conditioning', code: 'roomfacility=11', verified: 73,
+    match: /\bair ?con(ditioning|ditioned)?\b|\bA\/?C\b/i },
+  { key: 'private_bathroom', label: 'Private bathroom', code: 'roomfacility=38', verified: 58,
+    match: /\bprivate bath/i },
+  { key: 'balcony', label: 'Balcony', code: 'roomfacility=17', verified: 60,
+    match: /\bbalcon(y|ies)\b|\bterrace\b/i },
+  { key: 'hotels_only', label: 'Hotels only', code: 'ht_id=204', verified: 75,
+    match: /\bhotels? only\b|\bonly hotels?\b/i },
+  { key: 'resorts_only', label: 'Resorts only', code: 'ht_id=206', verified: 1,
+    match: /\bresorts? only\b|\bonly resorts?\b|\ba resort\b/i },
+  { key: 'well_reviewed', label: 'Rated 8+ by guests', code: 'review_score=80', verified: 3,
+    match: /\bwell[- ]reviewed\b|\bhighly rated\b|\bgood reviews?\b|\brating (of )?8/i },
+];
+
 const BOOKING: SiteProfile = {
   id: 'booking-stays',
   host: /(^|\.)booking\.com$/i,
@@ -260,11 +364,9 @@ const BOOKING: SiteProfile = {
         { label: '4 stars', value: '4', disabled: false },
         { label: '5 stars', value: '5', disabled: false },
       ] }),
-    field({ key: 'breakfast', label: 'Breakfast included', kind: 'toggle', group: 'Filters', order: 7,
-      exposure: 'advanced', defaultValue: false }),
-    field({ key: 'free_cancellation', label: 'Free cancellation', kind: 'toggle', group: 'Filters', order: 8,
-      exposure: 'advanced', defaultValue: false }),
+    ...BOOKING_FILTERS.map((f, i) => filterField(f, 7 + i)),
   ],
+  filters: BOOKING_FILTERS,
   output: {
     layout: 'cards',
     resultKind: 'stay',
@@ -296,8 +398,7 @@ const BOOKING: SiteProfile = {
     const filters: string[] = [];
     const stars = str(values.stars);
     if (/^[1-5]$/.test(stars)) filters.push(`class=${stars}`);
-    if (values.breakfast === true || values.breakfast === 'true') filters.push('mealplan=1');
-    if (values.free_cancellation === true || values.free_cancellation === 'true') filters.push('fc=2');
+    filters.push(...activeFilters(BOOKING_FILTERS, values));
     if (filters.length) query.set('nflt', filters.join(';'));
 
     return `https://www.booking.com/searchresults.html?${query.toString()}`;
