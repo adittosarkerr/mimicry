@@ -2,12 +2,12 @@
 
 **Voice-enabled browser automation.** Say what you need; it builds the automation, runs it, and gives you back structured results and a REST endpoint.
 
-| | |
+| What | Where |
 |---|---|
-| **Demo 1** | <https://github.com/adittosarkerr/mimic> |
-| **Demo 2** | <https://github.com/adittosarkerr/mimicry> |
-| **Live** | <https://mimicry-runner-jwh3.vercel.app> |
-| **Video** | *(see [§3](#3-video-walkthrough) — to be recorded)* |
+| **Demo 1** — record → form → REST | <https://github.com/adittosarkerr/mimic> |
+| **Demo 2** — voice enabled | <https://github.com/adittosarkerr/mimicry> |
+| **Live deployment** | <https://mimicry-runner-jwh3.vercel.app> |
+| **Video walkthrough** | *(see [§3](#3-video-walkthrough) — to be recorded)* |
 
 ---
 
