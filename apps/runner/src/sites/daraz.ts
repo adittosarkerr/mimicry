@@ -246,8 +246,18 @@ export async function readDarazResults(
 
     const list = data.mods?.listItems ?? [];
     if (n === 1) total = numeric(data.mainInfo?.totalResults) ?? undefined;
-    // A genuinely empty page is the end, and unambiguous.
-    if (!list.length) break;
+
+    /* An empty first page is the site answering the question — no results —
+       and staying instant here is the whole point of that being unambiguous.
+       An empty page past the first is not the same signal: the flakiness this
+       function already retries for (page 2 silently repeating page 1) has a
+       sibling where a page comes back with nothing at all instead of a
+       repeat, and `total` says there was more to find. Verified directly: a
+       three-page read of "mouse" (4,080 on the site) stopped at 80 once in
+       three runs, on an outright empty page 3 rather than a duplicate one —
+       the two are the same fault wearing a different shape, so they get the
+       same treatment below rather than a silent break here. */
+    if (!list.length && n === 1) break;
 
     let added = 0;
     for (const raw of list) {
