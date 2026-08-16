@@ -247,3 +247,4 @@ h1 {
 .status-ok { background: #ecfccb; border-color: #d9f99d; color: #3f6212; }
 .status-bad { background: #fef2f2; border-color: #fecaca; color: var(--danger); }
 .status[hidden] { display: none; }
+.count { color: var(--muted, #7a6656); font-variant-numeric: tabular-nums; }

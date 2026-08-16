@@ -79,8 +79,11 @@
       </label>
       <label class="field">
         <span>Ingest token</span>
-        <input id="ingestToken" type="text" placeholder="dev-local-token-change-me" />
-        <small class="hint">The value of <code>MIMIC_INGEST_TOKEN</code> in the runner’s <code>.env.local</code>.</small>
+        <input id="ingestToken" type="text" placeholder="dev-local-token-change-me" spellcheck="false" autocapitalize="off" autocorrect="off" />
+        <small class="hint">
+          The value of <code>MIMIC_INGEST_TOKEN</code> in the runner’s <code>.env.local</code>.
+          <span id="token-count" class="count"></span>
+        </small>
       </label>
       <button id="save-settings" class="btn btn-primary" type="button">Save &amp; check</button>
       <button id="close-settings" class="btn btn-quiet" type="button">Close</button>

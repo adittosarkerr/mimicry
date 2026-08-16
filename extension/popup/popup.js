@@ -52,6 +52,7 @@ async function refresh() {
   $('runnerUrl').value = s.runnerUrl || '';
   $('webUrl').value = s.webUrl || '';
   $('ingestToken').value = s.ingestToken || '';
+  showTokenCount();
 }
 
 // Keep the step counter live while the popup is open.
@@ -122,6 +123,18 @@ $('settings-toggle').addEventListener('click', () => {
 });
 
 $('close-settings').addEventListener('click', refresh);
+
+/* How many characters are actually in there.
+ *
+ * A token pasted on top of a selection that did not cover the whole field
+ * leaves a plausible-looking value of the wrong length — "ywK2RSyUIUfupnAdjW"
+ * where 32 characters were meant — and nothing on screen distinguishes that
+ * from a correct one until the runner refuses it. A count does. */
+function showTokenCount() {
+  const n = $('ingestToken').value.trim().length;
+  $('token-count').textContent = n ? ` — ${n} characters` : '';
+}
+$('ingestToken').addEventListener('input', showTokenCount);
 
 $('save-settings').addEventListener('click', async () => {
   const settings = {
