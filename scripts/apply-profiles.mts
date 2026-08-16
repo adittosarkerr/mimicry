@@ -85,6 +85,18 @@ function seedFrom(a: Automation): Record<string, unknown> {
   seed.check_out ??= byKey.get('check_out') ?? (finalUrl.match(/[?&]checkout=(\d{4}-\d{2}-\d{2})/) ?? [])[1];
   seed.rooms ??= byKey.get('rooms') ?? Number((finalUrl.match(/[?&]no_rooms=(\d+)/) ?? [])[1]);
 
+  /* A product search keeps its term in one parameter, but not under a name
+     this script could guess: the compiler names fields after the control's own
+     label, so Daraz's search box came out as `search_in_daraz`. The old URL
+     template says which field fed `q=`, which is general enough to work for the
+     next shop as well as this one. */
+  const qKey = template.match(/[?&]q=\{([a-z0-9_]+)\}/i)?.[1];
+  const qUrl = finalUrl.match(/[?&]q=([^&]+)/);
+  seed.query ??=
+    (qKey ? byKey.get(qKey) : undefined) ??
+    byKey.get('query') ??
+    (qUrl ? decodeURIComponent(qUrl[1].replace(/\+/g, ' ')) : undefined);
+
   seed.origin ??= toAirportCode(byKey.get('origin')) ?? byKey.get('origin');
   seed.destination ??= toAirportCode(byKey.get('destination')) ?? byKey.get('destination');
   seed.adults ??= byKey.get('adult') ?? byKey.get('adults') ?? 1;
@@ -124,14 +136,30 @@ for (const file of files.filter((f) => f.endsWith('.json'))) {
     return { ...f, defaultValue: value as never };
   });
 
+  /* The old description counted the old fields, so a re-formed automation
+     showed "2 editable fields" beside a chip reading "4 fields". Only the count
+     is rewritten — the rest of the sentence is still true, because the
+     recording it describes has not changed.
+
+     It is stored twice: the automation carries its own copy and so does the
+     schema, and the detail page renders the automation's. Rewriting only the
+     schema's fixed the JSON and left the screen saying the wrong thing. */
+  const recount = (text: string) =>
+    text.replace(
+      /\d+ editable fields?/,
+      `${fields.length} editable field${fields.length === 1 ? '' : 's'}`,
+    );
+
   const next: Automation = {
     ...a,
     name: a.name.includes('flight') || a.name.includes('Flight') ? a.name : profile.name,
+    description: recount(a.description),
     category: profile.category,
     emoji: profile.emoji,
     schema: {
       ...a.schema,
       fields,
+      description: recount(a.schema.description),
       groups: Array.from(new Set(fields.map((f) => f.group))),
       urlTemplate: undefined,
       output: profile.output,

@@ -116,6 +116,16 @@ No `{placeholder}` reaches inside those, so inference produced a form whose fiel
 fast path skipped — every run searched the recorded trip whatever was typed. Profiles build the URL
 in code instead, with city→IATA resolution. GoZayaan, Kayak and Booking.com have one.
 
+Daraz has one for a different reason. Its URL is already one value per parameter, so inference
+could express it — what inference could not do was tell `q=mouse` from
+`spm=a2a0e.tm80335411.search.d_go`, the click-provenance token the platform stamps into every
+internal link. That came out as an editable text field called "Spm" sitting beside the search box.
+`spm` and its siblings are in the compiler's junk-parameter list now, but a form built from one
+recording of a shop is still only a search box — no sort, no price range, none of what someone
+re-running a product search wants to change. The profile has those, each option confirmed to move
+the result: `ratedesc`, `bestseller` and `newest` are all *accepted* by the site and all return the
+default order, so they aren't offered.
+
 **Widget drivers** — shared by replay and the explorer:
 
 | Driver | Handles |
@@ -138,6 +148,26 @@ Three things learned the hard way:
 - **A currency can be its own line.** GoZayaan renders `BDT` and `4,349` separately.
 - **`[class*="fare"]` matches a "View Fares" button.** An element must actually contain a price
   before it is believed.
+
+**A site that never renders — `sites/daraz.ts`.** Daraz answers a headless browser with HTTP 200
+and a complete page — header, category rail, footer — and no product grid at all. Nothing errors;
+the markup simply never hydrates. The scanner then finds the only repeated block left, which is the
+top bar: "SAVE MORE ON APP", "BECOME A SELLER", "HELP & SUPPORT", "ভাষা" — four uniform blocks each
+carrying an icon, which is enough images to clear `looksLikeNavigation`'s picture test. Runs
+reported eight products and showed the reader a QR code.
+
+The grid is drawn from JSON the page fetches from its own URL with `ajax=true`, and that endpoint
+answers headless perfectly. So this host is read by asking the page to fetch its own JSON — 40 items
+a page, prices, ratings, sellers and stock already parsed. The hook sits at the top of
+`extractOutput` rather than in the replay engine, so a recorded replay, a voice-authored run and the
+serverless path all get it from one place; it returns `undefined` for every other host and for a
+first page that doesn't answer, and the structural scanner takes over as usual.
+
+Two things that only show up against the live site: the URL is never rebuilt there — whatever the
+automation navigated to is taken as given and only `ajax` and `page` are set on it, so parameters
+this module has never heard of survive. And Daraz intermittently answers `page=2` with page 1's
+list, then carries on correctly, so a repeat is retried once and only a run of three is believed to
+be the end. Treating the first repeat as the end stopped a 4,080-product search at 80.
 
 **Empty means empty.** A page whose own `<h1>` says "0 properties found" reports nothing found —
 even with sixty uniform blocks on it, because those are the site's standing categories.

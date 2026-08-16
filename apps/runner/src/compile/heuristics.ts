@@ -304,8 +304,14 @@ export function inferUrlTemplate(trace: Trace, fields: FormField[]): UrlTemplate
      identifiers, which are worse: `dest_id=-2403010` is Kuala Lumpur's id, and
      it silently overrules the `ss=` you just changed. Leaving it in makes an
      automation that searches the same city forever whatever you type. */
+  /* `spm` and `scm` are the Alibaba platforms' click-provenance tokens — Daraz,
+     Lazada, AliExpress, Taobao all stamp them into every internal link. A
+     recorded Daraz search carried `?spm=a2a0e.tm80335411.search.d_go&q=mouse`,
+     and the compiler, having no reason to think otherwise, offered "Spm" as an
+     editable text field next to the search box. They name the widget that was
+     clicked three navigations ago; nobody has ever wanted to change one. */
   const JUNK_PARAM =
-    /^(sid|sessionid|session_id|aid|_ga|gclid|fbclid|utm_|yt_pid|origin|ref|referrer|sp_|pf_rd|dib|qid|sprefix|crid|s?token|csrf|label|efdco|src|dest_id|dest_type|place_id|geo_?id|city_?id|region_?id|entity_?id|search_pageview_id|sb_travel_purpose)$/i;
+    /^(sid|sessionid|session_id|aid|_ga|gclid|fbclid|utm_|yt_pid|origin|ref|referrer|sp_|pf_rd|dib|qid|sprefix|crid|s?token|csrf|label|efdco|src|dest_id|dest_type|place_id|geo_?id|city_?id|region_?id|entity_?id|search_pageview_id|sb_travel_purpose|spm|scm|pvid|algo_?[a-z_]*|clickTrace|_keyori|ie)$/i;
   for (const key of Array.from(url.searchParams.keys())) {
     if (JUNK_PARAM.test(key)) url.searchParams.delete(key);
   }
@@ -529,6 +535,38 @@ function sameLabel(a: string, b: string): boolean {
   return norm(a) === norm(b);
 }
 
+/**
+ * The recorded field a profile's field should inherit its value from.
+ *
+ * Exact key or identical label is the common case and is tried first. What it
+ * misses is that the compiler names a field after the control's own label on
+ * the page, and a site rarely labels its search box "Search": Daraz calls it
+ * "Search In Daraz", so a recording of `q=keyboard` produced `search_in_daraz`
+ * and the profile's `query` field inherited nothing. The automation then opened
+ * with an empty box, which reads as the recording having been lost.
+ *
+ * So an overlap is accepted too — either name containing the other — with the
+ * shortest match winning, which is the same rule `applyProfile` uses on the
+ * model's field names for the same reason.
+ */
+function recordedFor(recorded: FormField[], target: FormField): FormField | undefined {
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const has = (f: FormField) => f.defaultValue != null && f.defaultValue !== '';
+
+  const exact = recorded.find((r) => r.key === target.key || sameLabel(r.label, target.label));
+  if (exact) return exact;
+
+  const want = [norm(target.key), norm(target.label)].filter((w) => w.length > 3);
+  if (!want.length) return undefined;
+
+  return recorded
+    .filter(has)
+    .filter((r) =>
+      [norm(r.key), norm(r.label)].some((n) => want.some((w) => n.includes(w) || w.includes(n))),
+    )
+    .sort((a, b) => a.key.length - b.key.length)[0];
+}
+
 export function compileHeuristically(trace: Trace): FormSchema {
   const fields: FormField[] = [];
   const seen = new Map<string, FormField>();
@@ -632,7 +670,7 @@ export function compileHeuristically(trace: Trace): FormSchema {
   const profile = profileFor(trace.origin);
   const profileFields = profile
     ? profile.fields.map((f) => {
-        const recorded = fields.find((r) => r.key === f.key || sameLabel(r.label, f.label));
+        const recorded = recordedFor(fields, f);
         return recorded?.defaultValue != null && recorded.defaultValue !== ''
           ? { ...f, defaultValue: recorded.defaultValue }
           : { ...f };

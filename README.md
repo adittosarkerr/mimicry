@@ -138,6 +138,7 @@ npm run dev            # web + runner together
 npm run dev:web        # Next dev server
 npm run dev:runner     # runner with watch
 node scripts/extract-suite.mjs      # extraction accuracy across 14 sites
+npx tsx scripts/daraz-test.mts      # Daraz end to end: form, pagination, empty state
 npx tsx scripts/apply-profiles.mts  # re-form saved automations from site profiles (--write to apply)
 ```
 

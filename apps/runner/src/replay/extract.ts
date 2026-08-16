@@ -1,5 +1,6 @@
 import type { Page } from 'playwright';
 import type { OutputSpec, ResultItem, ResultKind, RunOutput } from '@mimic/schema';
+import { readDarazResults } from '../sites/daraz';
 
 /**
  * Output scraping.
@@ -1682,6 +1683,21 @@ export interface ExtractOptions {
 export async function extractOutput(page: Page, opts: ExtractOptions): Promise<RunOutput> {
   const { spec } = opts;
   const maxPages = Math.max(1, Math.min(opts.maxPages ?? 10, 30));
+
+  /* A site that will not render its results to a headless browser at all.
+   *
+   * Checked here rather than in the replay engine so that every caller gets it
+   * from one place — a recorded replay, a voice-authored run and the serverless
+   * path all arrive at this function with the page already on the results URL.
+   * Returns undefined for anything that isn't Daraz, or when its own endpoint
+   * doesn't answer, and the structural scanner below takes over as usual. */
+  const viaSiteReader = await readDarazResults(page, {
+    maxPages,
+    summaryHint: opts.summaryHint,
+    onProgress: opts.onProgress,
+    deadline: opts.deadline,
+  });
+  if (viaSiteReader) return viaSiteReader;
 
   const bodyText = (await page.evaluate(() => document.body?.innerText ?? '').catch(() => ''))
     .slice(0, 12_000)

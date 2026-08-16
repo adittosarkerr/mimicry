@@ -22,6 +22,7 @@ export {
   config as runnerConfig,
   normalizeTrace,
   planFromTranscript,
+  profileHosts,
   repairHostnames,
   resolveSpelling,
   runAutomation,

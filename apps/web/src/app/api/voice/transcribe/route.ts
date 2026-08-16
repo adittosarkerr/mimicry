@@ -1,5 +1,5 @@
 import { library, store } from '@/lib/server/backend';
-import { repairHostnames, resolveSpelling, runnerConfig, transcribeAudio } from '@/lib/server/runner';
+import { profileHosts, repairHostnames, resolveSpelling, runnerConfig, transcribeAudio } from '@/lib/server/runner';
 
 /**
  * Audio → text, for browsers whose own speech recognition is unavailable —
@@ -41,8 +41,8 @@ export async function POST(req: Request) {
     /* Fix site names before anyone sees them. By the time "gozion.com" reaches
        the planner it is just a site nobody has heard of, and the user's own
        automations are the correction key. */
-    const sites = store && library ? (await library.listAutomations().catch(() => [])).map((a) => a.site) : [];
-    const transcript = repairHostnames(resolveSpelling(heard), sites);
+    const saved = store && library ? (await library.listAutomations().catch(() => [])).map((a) => a.site) : [];
+    const transcript = repairHostnames(resolveSpelling(heard), [...saved, ...profileHosts()]);
 
     return json({ transcript, heard: transcript === heard ? undefined : heard });
   } catch (err) {

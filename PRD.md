@@ -146,6 +146,11 @@ Stated plainly, because each one is a real boundary rather than a bug awaiting a
   broken recordings.
 - **Compound-URL sites need a profile.** Where route and dates are welded into one path segment, no
   generic `{placeholder}` can reach inside; GoZayaan, Kayak and Booking have hand-written profiles.
+- **Sites that never render headless need reading another way.** Daraz serves a complete page with
+  no product grid to a headless browser and no error, so the structural scanner picks up its top bar
+  instead. It is read from the JSON the page fetches for itself. This is the general shape of the
+  next such site: where a grid is drawn by script that refuses to run, the data is usually still
+  fetched over the wire, and reading that beats fighting the renderer.
 - **Multi-step builders** (a PC configurator) are beyond a single search-and-scrape automation.
 
 ---

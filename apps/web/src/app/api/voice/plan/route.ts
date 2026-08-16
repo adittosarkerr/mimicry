@@ -3,6 +3,7 @@ import { library, store, unavailableReason, userIdFrom } from '@/lib/server/back
 import {
   authorAutomation,
   planFromTranscript,
+  profileHosts,
   repairHostnames,
   resolveSpelling,
   runnerConfig,
@@ -86,11 +87,14 @@ async function plan(req: Request): Promise<Response> {
   /* The user's own automations name the sites they talk about, so they are the
      correction key for a recogniser that turns "gozayaan dot com" into
      something nobody has heard of. Spelling asides are resolved first: someone
-     spelling a name out is correcting an earlier mishearing. */
-  const transcript = repairHostnames(
-    resolveSpelling(spoken),
-    all.map((a) => a.site),
-  );
+     spelling a name out is correcting an earlier mishearing.
+
+     The sites with profiles join them, so the first request of a fresh install
+     can name one before anything has been recorded. */
+  const transcript = repairHostnames(resolveSpelling(spoken), [
+    ...all.map((a) => a.site),
+    ...profileHosts(),
+  ]);
 
   const known = knownTemplates(all);
 

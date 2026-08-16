@@ -1,5 +1,6 @@
 import type { FormField, OutputSpec } from '@mimic/schema';
 import { toAirportCode } from './airports';
+import { DARAZ_HOST } from './daraz';
 
 /**
  * Known sites, described once and properly.
@@ -405,7 +406,133 @@ const BOOKING: SiteProfile = {
   },
 };
 
-const PROFILES: SiteProfile[] = [GOZAYAAN, KAYAK, BOOKING];
+/**
+ * Daraz product search.
+ *
+ * Here for a different reason from the three above. Daraz's URL is already one
+ * value per parameter, so inference could express it — what inference could not
+ * do was tell the difference between the two parameters on a recorded search:
+ *
+ *   /catalog/?spm=a2a0e.tm80335411.search.d_go&q=mouse
+ *
+ * `q` is the search. `spm` is a click-provenance token naming the widget the
+ * person clicked to get here, and it came out as an editable text field called
+ * "Spm" sitting beside the search box with `a2a0e.tm80335411.search.d_go` in
+ * it. It is now in the compiler's junk-parameter list, but a form built from
+ * one recording of a shop would still have been a search box and nothing else —
+ * no sort, no price range, none of the things a person re-running a product
+ * search actually wants to change.
+ *
+ * Reading the results has its own problem, handled in `sites/daraz.ts`.
+ */
+const DARAZ: SiteProfile = {
+  id: 'daraz-search',
+  host: DARAZ_HOST,
+  name: 'Daraz product search',
+  category: 'shopping',
+  emoji: '🛒',
+  fields: [
+    field({
+      key: 'query',
+      label: 'Search',
+      kind: 'text',
+      group: 'Search',
+      order: 0,
+      required: true,
+      hint: 'What to search for — "mouse", "gaming keyboard", "iphone 15 case".',
+    }),
+    field({
+      key: 'sort',
+      label: 'Sort by',
+      kind: 'select',
+      group: 'Search',
+      order: 1,
+      defaultValue: '',
+      /* Only the orderings that were confirmed to change the result.
+         `ratedesc`, `bestseller` and `newest` are all accepted by the site and
+         all return the default order unchanged, so offering them would be
+         offering three controls that quietly do nothing. */
+      options: [
+        { label: 'Best match', value: '', disabled: false },
+        { label: 'Price: low to high', value: 'priceasc', disabled: false },
+        { label: 'Price: high to low', value: 'pricedesc', disabled: false },
+      ],
+    }),
+    field({
+      key: 'min_price',
+      label: 'Min price',
+      kind: 'number',
+      group: 'Filters',
+      order: 2,
+      exposure: 'advanced',
+      validation: { min: 0 },
+      hint: 'In the storefront currency. Leave empty for no minimum.',
+    }),
+    field({
+      key: 'max_price',
+      label: 'Max price',
+      kind: 'number',
+      group: 'Filters',
+      order: 3,
+      exposure: 'advanced',
+      validation: { min: 0 },
+    }),
+  ],
+  output: {
+    layout: 'cards',
+    resultKind: 'product',
+    /* Never used: `readDarazResults` answers before the DOM scanner runs. Kept
+       truthful anyway, because it is what the grid is called on the rare
+       session where the markup does render. */
+    itemLocator: '[data-qa-locator="product-item"]',
+    itemLocatorPinned: false,
+    fields: [],
+    emptyStateHints: ['no results found', '0 items found', 'we could not find any matches'],
+    unavailableHints: ['out of stock', 'sold out'],
+  },
+
+  buildUrl(values) {
+    const query = str(values.query);
+    if (!query) return undefined;
+
+    const params = new URLSearchParams({ q: query });
+
+    const sort = str(values.sort);
+    if (sort === 'priceasc' || sort === 'pricedesc') params.set('sort', sort);
+
+    /* One `price=min-max` parameter, and it needs both ends. Sending `500-`
+       returns everything, which looks like the filter applied and did nothing. */
+    const min = Number(values.min_price);
+    const max = Number(values.max_price);
+    const hasMin = Number.isFinite(min) && min > 0;
+    const hasMax = Number.isFinite(max) && max > 0;
+    if (hasMin || hasMax) {
+      params.set('price', `${hasMin ? Math.floor(min) : 1}-${hasMax ? Math.floor(max) : 999999}`);
+    }
+
+    return `https://www.daraz.com.bd/catalog/?${params.toString()}`;
+  },
+};
+
+const PROFILES: SiteProfile[] = [GOZAYAAN, KAYAK, BOOKING, DARAZ];
+
+/**
+ * The hostnames of every site described here.
+ *
+ * Used as a correction key for misheard site names. That key was built only
+ * from the user's own saved automations, which is right for a site they have
+ * recorded and useless on the first request of a fresh install: "search daraz
+ * for a mouse" arrives from the transcriber as "search the rise for a mouse"
+ * and there is nothing to repair it against. A site with a profile is one this
+ * build knows how to drive, so it is worth recognising by name before anyone
+ * has recorded it.
+ */
+export const profileHosts = (): string[] => [
+  'gozayaan.com',
+  'kayak.com',
+  'booking.com',
+  'daraz.com.bd',
+];
 
 /** The profile for a hostname, if this site has one. */
 export function profileFor(site: string | undefined): SiteProfile | undefined {

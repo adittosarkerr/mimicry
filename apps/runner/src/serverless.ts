@@ -27,6 +27,7 @@ export {
   transcribeAudio,
 } from './voice';
 export { config } from './config';
+export { profileHosts } from './sites/profiles';
 export {
   deleteAutomation,
   getAutomation,

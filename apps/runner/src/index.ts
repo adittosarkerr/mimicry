@@ -26,7 +26,7 @@ import {
   transcribeAudio,
 } from './voice';
 import { authorAutomation, type KnownTemplate } from './authoring';
-import { filtersInRequest, profileFor } from './sites/profiles';
+import { filtersInRequest, profileFor, profileHosts } from './sites/profiles';
 import { isLocalSttWarm, warmLocalStt } from './stt-local';
 import { normalizeTrace } from './replay/normalize';
 import { extractOutput, listRegionCandidates } from './replay/extract';
@@ -599,7 +599,7 @@ app.post(
          dot com" into "gozion.com", and by the time that reaches the planner
          it is just a site nobody has heard of. The user's own automations name
          the sites they talk about, so they are the correction key. */
-      const sites = (await listAutomations().catch(() => [])).map((a) => a.site);
+      const sites = [...(await listAutomations().catch(() => [])).map((a) => a.site), ...profileHosts()];
       /* Spelling asides first: somebody spelling a name out is correcting an
          earlier mishearing, and the spelled version is itself mangled often
          enough that it must not be allowed to win by looking more like a
@@ -627,7 +627,7 @@ app.post(
     const transcript = spoken
       ? repairHostnames(
           resolveSpelling(spoken),
-          (await listAutomations().catch(() => [])).map((a) => a.site),
+          [...(await listAutomations().catch(() => [])).map((a) => a.site), ...profileHosts()],
         )
       : '';
     if (!transcript) {
