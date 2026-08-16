@@ -124,15 +124,27 @@ $('settings-toggle').addEventListener('click', () => {
 $('close-settings').addEventListener('click', refresh);
 
 $('save-settings').addEventListener('click', async () => {
-  await send({
-    type: 'mimic:save-settings',
-    settings: {
-      runnerUrl: $('runnerUrl').value.trim().replace(/\/$/, '') || 'http://localhost:8787',
-      webUrl: $('webUrl').value.trim().replace(/\/$/, '') || 'http://localhost:3000',
-      ingestToken: $('ingestToken').value.trim(),
-    },
-  });
-  await refresh();
+  const settings = {
+    runnerUrl: $('runnerUrl').value.trim().replace(/\/$/, '') || 'http://localhost:8787',
+    webUrl: $('webUrl').value.trim().replace(/\/$/, '') || 'http://localhost:3000',
+    ingestToken: $('ingestToken').value.trim(),
+  };
+
+  const status = $('settings-status');
+  status.hidden = false;
+  status.className = 'status';
+  status.textContent = 'Checking…';
+
+  /* Saved first, so a runner that is merely asleep does not cost the typing.
+     Then checked, because the alternative is finding out the token is wrong
+     after recording a twenty-step task. */
+  await send({ type: 'mimic:save-settings', settings });
+  const result = await send({ type: 'mimic:check-settings', settings });
+
+  status.className = `status ${result?.ok ? 'status-ok' : 'status-bad'}`;
+  status.textContent = result?.ok ? result.message : result?.error || 'Could not check the runner.';
+
+  if (result?.ok) setTimeout(refresh, 1200);
 });
 
 refresh();

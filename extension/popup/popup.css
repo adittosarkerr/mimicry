@@ -216,3 +216,34 @@ h1 {
 @media (prefers-reduced-motion: reduce) {
   .mark-dot, .live-dot, .spinner { animation: none; }
 }
+
+/* Settings feedback: the answer to "did that work" shown where the value was
+   typed, in the same shapes as the error banner above. */
+.hint {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted, #7a6656);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+.hint code {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 10px;
+  background: #f9f1e6;
+  padding: 1px 3px;
+  border-radius: 3px;
+}
+
+.status {
+  margin: 10px 0 0;
+  padding: 9px 11px;
+  border-radius: 10px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  background: #f9f1e6;
+  border: 1px solid #f2e5d3;
+  color: #4a382a;
+}
+.status-ok { background: #ecfccb; border-color: #d9f99d; color: #3f6212; }
+.status-bad { background: #fef2f2; border-color: #fecaca; color: var(--danger); }
+.status[hidden] { display: none; }

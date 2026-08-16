@@ -257,6 +257,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         await chrome.storage.local.set({ 'mimic:settings': msg.settings });
         return sendResponse({ ok: true });
 
+      case 'mimic:check-settings':
+        return sendResponse(await checkSettings(msg.settings));
+
       default:
         return sendResponse({ ok: false, error: 'unknown message' });
     }
@@ -375,7 +378,27 @@ async function stopRecording(meta) {
 
     if (!res.ok) {
       const text = await res.text().catch(() => '');
-      return { ok: false, error: `Runner rejected the trace (${res.status}). ${text.slice(0, 200)}` };
+      let said = '';
+      try {
+        said = JSON.parse(text).error || '';
+      } catch {
+        said = text.slice(0, 160);
+      }
+
+      /* A 401 is one thing and one thing only: the token here is not the token
+         the runner was started with. Saying "Runner rejected the trace (401)"
+         and pasting its JSON back makes the reader work that out for
+         themselves, while they are still wondering whether they just lost the
+         recording — so say what is wrong, where to change it, and that the
+         recording is safe. It is: the trace is only cleared on success. */
+      const error =
+        res.status === 401
+          ? 'The ingest token in this extension does not match the one the runner was started with. ' +
+            'Open ⚙ Settings, paste the value of MIMIC_INGEST_TOKEN from the runner’s .env.local, and save — ' +
+            'then press Build again. Your recording is still here.'
+          : `The runner refused this recording (${res.status})${said ? `: ${said}` : '.'}`;
+
+      return { ok: false, error, keptSteps: trace.steps.length };
     }
 
     const data = await res.json();
@@ -392,6 +415,59 @@ async function stopRecording(meta) {
       keptSteps: trace.steps.length,
     };
   }
+}
+
+/**
+ * Does this runner exist, and will it accept this token?
+ *
+ * Asked when settings are saved, because the alternative is finding out at the
+ * end of a recording. Recording a twenty-step task and then being told the
+ * token is wrong is the same amount of information delivered at the worst
+ * possible moment.
+ *
+ * The token is checked by posting a deliberately empty trace. The runner
+ * answers 401 when the token is wrong and 400 when it is right and the trace
+ * is unreadable — which is exactly the distinction being tested, and it writes
+ * nothing either way.
+ */
+async function checkSettings(settings) {
+  const url = (settings?.runnerUrl || '').replace(/\/$/, '');
+  if (!url) return { ok: false, error: 'Set the runner URL first.' };
+
+  let health;
+  try {
+    health = await fetch(`${url}/health`, { signal: AbortSignal.timeout(8000) });
+  } catch (err) {
+    return {
+      ok: false,
+      error: `No runner answered at ${url}. Start it with \`npm run dev:runner\`, or check the address. (${err.message})`,
+    };
+  }
+  if (!health.ok) return { ok: false, error: `${url} answered ${health.status}, which is not a Mimic runner.` };
+
+  const probe = await fetch(`${url}/api/ingest`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${settings.ingestToken ?? ''}`,
+    },
+    body: JSON.stringify({ trace: {} }),
+    signal: AbortSignal.timeout(8000),
+  }).catch(() => null);
+
+  if (!probe) return { ok: false, error: 'The runner stopped answering partway through the check.' };
+  if (probe.status === 401) {
+    return {
+      ok: false,
+      error: 'That token is not the one this runner was started with. Copy MIMIC_INGEST_TOKEN from its .env.local.',
+    };
+  }
+
+  const info = await health.json().catch(() => ({}));
+  return {
+    ok: true,
+    message: `Connected. ${info.ai && info.ai !== 'disabled' ? `AI: ${info.ai}` : 'No AI key set'} · store: ${info.store ?? 'files'}`,
+  };
 }
 
 /** Content scripts declared in the manifest miss tabs that were already open. */

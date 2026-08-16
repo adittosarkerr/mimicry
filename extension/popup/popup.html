@@ -80,9 +80,13 @@
       <label class="field">
         <span>Ingest token</span>
         <input id="ingestToken" type="text" placeholder="dev-local-token-change-me" />
+        <small class="hint">The value of <code>MIMIC_INGEST_TOKEN</code> in the runner’s <code>.env.local</code>.</small>
       </label>
-      <button id="save-settings" class="btn btn-primary" type="button">Save</button>
+      <button id="save-settings" class="btn btn-primary" type="button">Save &amp; check</button>
       <button id="close-settings" class="btn btn-quiet" type="button">Close</button>
+      <!-- Answered here, at the moment the value is entered, rather than at the
+           end of a recording when it is far more expensive to be wrong. -->
+      <p id="settings-status" class="status" hidden></p>
     </section>
 
     <p id="error" class="error" hidden></p>
