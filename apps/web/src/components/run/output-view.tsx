@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import type { ResultItem, ResultKind, Run, RunOutput } from '@mimic/schema';
 import { api } from '@/lib/api';
@@ -130,28 +130,13 @@ export function OutputView({ run }: { run: Run }) {
         </div>
       )}
 
-      {/* Results from several pages stay grouped. Forty products in one wall is
-          a pile; four pages of ten is something you can navigate. */}
-      {pagesOf(output.items).map(({ page, items }, groupIndex) => (
-        <section key={page} className={groupIndex ? 'pt-2' : undefined}>
-          {pagesOf(output.items).length > 1 && (
-            <div className="mb-3 flex items-center gap-3">
-              <span className="text-[12px] font-medium uppercase tracking-wider text-ink-400">
-                Page {page}
-              </span>
-              <span className="h-px flex-1 bg-sand-200" />
-              <span className="text-[12px] text-ink-400">{items.length}</span>
-            </div>
-          )}
-          <div className={cn('grid', grid)}>
-            {items.map((item, i) => (
-              <Reveal key={item.id} index={i}>
-                <ResultCard item={item} kind={kind} />
-              </Reveal>
-            ))}
-          </div>
-        </section>
-      ))}
+      {/* One page at a time, in the site's own pages.
+          Ten pages of forty products stacked into a single column is 400 cards
+          and a scrollbar the height of a pin — you cannot get back to the third
+          result, and you cannot tell page 7 from page 8 without reading the
+          divider. The run already knows which page each result came from, so
+          that is what gets paged through. */}
+      <PagedResults items={output.items} kind={kind} grid={grid} />
 
       {run.output?.finalScreenshot && (
         <details className="group rounded-[18px] border border-sand-200 bg-white/50 p-4">
@@ -191,6 +176,112 @@ function ResultCard({ item, kind }: { item: ResultItem; kind: ResultKind }) {
     default:
       return <GenericCard item={item} />;
   }
+}
+
+/**
+ * Results, one scraped page at a time.
+ *
+ * The pages are the site's own — page 3 here is page 3 there — so a result can
+ * be found again where it was seen, and "400 products" stops meaning "scroll
+ * until you give up". A single-page run renders exactly as it did before, with
+ * no pager and no page label.
+ */
+function PagedResults({
+  items,
+  kind,
+  grid,
+}: {
+  items: ResultItem[];
+  kind: ResultKind;
+  grid: string;
+}) {
+  const pages = pagesOf(items);
+  const [at, setAt] = useState(0);
+  const top = useRef<HTMLDivElement>(null);
+
+  // Beyond the end after a re-run with fewer pages: go back to the first.
+  const index = Math.min(at, pages.length - 1);
+  const current = pages[index];
+  if (!current) return null;
+
+  const go = (next: number) => {
+    setAt(next);
+    /* Jumping to page four and landing halfway down it is disorienting — the
+       eye expects the top of the new page, the way the site itself behaves. */
+    top.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  return (
+    <div ref={top} className="scroll-mt-6 space-y-4">
+      {pages.length > 1 && (
+        <div className="flex items-center gap-3">
+          <span className="text-[12px] font-medium uppercase tracking-wider text-ink-400">
+            Page {current.page}
+          </span>
+          <span className="h-px flex-1 bg-sand-200" />
+          <span className="text-[12px] text-ink-400">
+            {current.items.length} of {items.length}
+          </span>
+        </div>
+      )}
+
+      <div className={cn('grid', grid)}>
+        {current.items.map((item, i) => (
+          <Reveal key={item.id} index={i}>
+            <ResultCard item={item} kind={kind} />
+          </Reveal>
+        ))}
+      </div>
+
+      {pages.length > 1 && (
+        <nav className="flex flex-wrap items-center justify-center gap-1.5 pt-2">
+          <PagerButton onClick={() => go(index - 1)} disabled={index === 0}>
+            ← Previous
+          </PagerButton>
+
+          {pages.map((p, i) => (
+            <PagerButton key={p.page} onClick={() => go(i)} active={i === index}>
+              {p.page}
+            </PagerButton>
+          ))}
+
+          <PagerButton onClick={() => go(index + 1)} disabled={index === pages.length - 1}>
+            Next →
+          </PagerButton>
+        </nav>
+      )}
+    </div>
+  );
+}
+
+function PagerButton({
+  children,
+  onClick,
+  disabled,
+  active,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  active?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-current={active ? 'page' : undefined}
+      className={cn(
+        'min-w-9 rounded-lg border px-2.5 py-1.5 text-[13px] font-medium transition-colors',
+        active
+          ? 'border-ember-300 bg-ember-500 text-white'
+          : 'border-sand-300 bg-white/70 text-ink-700 hover:border-sand-400 hover:text-ink-900',
+        disabled && 'cursor-not-allowed opacity-40 hover:border-sand-300 hover:text-ink-700',
+      )}
+    >
+      {children}
+    </button>
+  );
 }
 
 /** Results split into the pages they were scraped from, in order. */
@@ -352,17 +443,30 @@ function ResultImage({
   className: string;
   fallback?: React.ReactNode;
 }) {
-  const [failed, setFailed] = useState(false);
-  if (!src || failed) return <>{fallback ?? null}</>;
+  /* Straight from the site first, through the runner only if that fails.
+   *
+   * Everything used to be proxied, because plenty of hosts serve images with
+   * `Cross-Origin-Resource-Policy: same-site` and the browser refuses to paint
+   * those on a page that isn't theirs. But most hosts don't — Daraz's two CDNs
+   * both send `Access-Control-Allow-Origin: *` — and proxying anyway funnels
+   * every image on the page through one server. A 400-product search meant 400
+   * requests queued behind each other with a twelve-second timeout apiece, and
+   * the ones that lost that race rendered as "no image" on products whose
+   * pictures were fine.
+   *
+   * So the browser tries the real URL, which is cached, parallel and free, and
+   * only the genuinely blocked ones cost the runner anything. */
+  const [stage, setStage] = useState<'direct' | 'proxied' | 'failed'>('direct');
+  if (!src || stage === 'failed') return <>{fallback ?? null}</>;
 
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={api.imageUrl(src)}
+      src={stage === 'direct' ? src : api.imageUrl(src)}
       alt=""
       className={className}
       loading="lazy"
-      onError={() => setFailed(true)}
+      onError={() => setStage((s) => (s === 'direct' ? 'proxied' : 'failed'))}
     />
   );
 }

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import type { FormSchema, Run, RunEvent, RunStatus } from '@mimic/schema';
+import type { FormField, FormSchema, Run, RunEvent, RunStatus } from '@mimic/schema';
 import { api, runnerUnreachable, RUNNER_URL, streamRun, type RunStream } from '@/lib/api';
 import { RunConsole } from '@/components/run/run-console';
 import { OutputView } from '@/components/run/output-view';
@@ -582,10 +582,10 @@ export function VoiceStudio() {
                           {f.label}
                           {plan.values[f.key] !== undefined && <Badge tone="ember">heard</Badge>}
                         </span>
-                        <input
-                          className="w-full rounded-xl border border-sand-300 bg-white px-3 py-2 text-[14px] text-ink-900 focus:border-ember-400 focus:outline-none focus:ring-4 focus:ring-ember-500/12"
-                          value={String(values[f.key] ?? '')}
-                          onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}
+                        <PlanField
+                          field={f}
+                          value={values[f.key]}
+                          onChange={(next) => setValues({ ...values, [f.key]: next })}
                         />
                       </label>
                     ))}
@@ -644,6 +644,93 @@ export function VoiceStudio() {
         </div>
       )}
     </div>
+  );
+}
+
+
+/**
+ * One editable value on the plan, rendered as the control it actually is.
+ *
+ * Every field used to be a text box. A select arrived as an empty box with its
+ * options nowhere — Daraz's "Sort by" showed nothing to sort by — and a toggle
+ * arrived as the literal word "false", which is not something anyone can
+ * meaningfully edit. The full form has always got this right; this is the
+ * compact copy on the voice page, and it was lying about what the automation
+ * could do.
+ */
+function PlanField({
+  field,
+  value,
+  onChange,
+}: {
+  field: FormField;
+  value: unknown;
+  onChange: (next: unknown) => void;
+}) {
+  const box =
+    'w-full rounded-xl border border-sand-300 bg-white px-3 py-2 text-[14px] text-ink-900 focus:border-ember-400 focus:outline-none focus:ring-4 focus:ring-ember-500/12';
+
+  if (field.kind === 'select' && field.options.length) {
+    return (
+      <select className={box} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)}>
+        {field.options.map((o) => (
+          <option key={o.value} value={o.value} disabled={o.disabled}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  if (field.kind === 'toggle' || field.kind === 'checkbox') {
+    const on = value === true || value === 'true';
+    return (
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        onClick={() => onChange(!on)}
+        className={cn(
+          'flex items-center gap-2.5 rounded-xl border px-3 py-2 text-[13.5px] transition-colors',
+          on
+            ? 'border-ember-300 bg-ember-100/50 text-ink-900'
+            : 'border-sand-300 bg-white text-ink-500',
+        )}
+      >
+        <span
+          className={cn(
+            'relative h-[18px] w-8 shrink-0 rounded-full transition-colors',
+            on ? 'bg-ember-500' : 'bg-sand-300',
+          )}
+        >
+          <span
+            className={cn(
+              'absolute top-[2px] size-[14px] rounded-full bg-white transition-all',
+              on ? 'left-[16px]' : 'left-[2px]',
+            )}
+          />
+        </span>
+        {on ? 'Yes' : 'No'}
+      </button>
+    );
+  }
+
+  return (
+    <input
+      className={box}
+      type={field.kind === 'number' ? 'number' : field.kind === 'date' ? 'date' : 'text'}
+      value={String(value ?? '')}
+      placeholder={field.hint?.slice(0, 40)}
+      onChange={(e) =>
+        onChange(
+          field.kind === 'number'
+            ? e.target.value === ''
+              ? ''
+              : Number(e.target.value)
+            : e.target.value,
+        )
+      }
+    />
   );
 }
 
