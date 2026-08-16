@@ -32,7 +32,12 @@ import type { ResultItem, RunOutput } from '@mimic/schema';
  */
 
 /** Daraz runs one storefront per country, all on the same platform. */
-export const DARAZ_HOST = /(^|\.)daraz\.(com\.bd|com\.np|lk|pk|com\.mm)$/i;
+/* `daraz.com` is here alongside the storefronts because that is what people
+   say and what a transcriber writes down. It redirects to a storefront in a
+   browser, and without it the host matched no profile at all — so a request
+   naming it got a guessed URL instead of the one that works. buildUrl always
+   targets the Bangladesh storefront regardless. */
+export const DARAZ_HOST = /(^|\.)daraz\.(com\.bd|com\.np|com\.mm|com|lk|pk)$/i;
 
 export const isDarazHost = (host: string | undefined): boolean =>
   !!host && DARAZ_HOST.test(host.replace(/^https?:\/\//i, '').split('/')[0]);

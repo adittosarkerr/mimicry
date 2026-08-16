@@ -233,7 +233,18 @@ function merge(baseline: FormSchema, ai: AiSchema, trace: Trace): FormSchema {
   for (const f of baseline.fields) {
     if (f.bindsTo.some((id) => claimedSteps.has(id))) continue;
 
-    const twin = fields.find((existing) => sameThing(existing.label, f.label));
+    /* Key first, then label.
+     *
+     * Matching on the label alone assumes the model and the compiler name the
+     * same control the same way, and they do not: a Daraz recording produced
+     * `query` labelled "Search", the model called the identical field "Search
+     * query", and the two failed to recognise each other. The recorded value
+     * was then pushed in beside the model's as `query_2` — so the form opened
+     * with an empty search box and the real term hidden in an advanced field
+     * nobody would look in. */
+    const twin = fields.find(
+      (existing) => existing.key === f.key || sameThing(existing.label, f.label),
+    );
     if (twin) {
       if (twin.defaultValue === null || twin.defaultValue === undefined) {
         twin.defaultValue = f.defaultValue;

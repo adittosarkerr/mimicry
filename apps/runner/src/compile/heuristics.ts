@@ -667,13 +667,28 @@ export function compileHeuristically(trace: Trace): FormSchema {
    * inference produces a form whose fields cannot reach the URL at all. The
    * recorded values still seed the profile's fields, so the automation opens
    * on the trip that was recorded — it is just editable now. */
+  /**
+   * A profile's fields, but only foregrounded where the recording earns it.
+   *
+   * The profile describes everything the site can do. A recording is evidence
+   * of one thing somebody actually did. Handing back all of the former for the
+   * latter is how a recorded Daraz search — one search box, one term — came
+   * back as a form with a sort order and a price range nobody had touched,
+   * none of which the recording says anything about.
+   *
+   * They are not dropped: the profile knows they work, and the full form still
+   * offers them under Advanced. They just stop being the first thing you see
+   * when you asked for the thing you recorded. Required fields and anything
+   * the recording did supply stay in front, which is why a Booking recording
+   * keeps its dates and guests.
+   */
   const profile = profileFor(trace.origin);
   const profileFields = profile
     ? profile.fields.map((f) => {
         const recorded = recordedFor(fields, f);
-        return recorded?.defaultValue != null && recorded.defaultValue !== ''
-          ? { ...f, defaultValue: recorded.defaultValue }
-          : { ...f };
+        const supplied = recorded?.defaultValue != null && recorded.defaultValue !== '';
+        if (supplied) return { ...f, defaultValue: recorded!.defaultValue };
+        return f.required ? { ...f } : { ...f, exposure: 'advanced' as const };
       })
     : undefined;
 

@@ -8,6 +8,7 @@ import { api, curlSnippet, streamRun, type AutomationSummary, type RunStream } f
 import { DynamicForm, type Values } from '@/components/form/dynamic-form';
 import { RunConsole } from '@/components/run/run-console';
 import { OutputView } from '@/components/run/output-view';
+import { RunApiPanel } from '@/components/run/run-api-panel';
 import { RegionPicker } from '@/components/run/region-picker';
 import { Badge, Button, Card, SectionLabel, Spinner } from '@/components/ui';
 import { useAuth } from '@/lib/auth-context';
@@ -300,6 +301,16 @@ export function AutomationDetail({ id, isNew }: { id: string; isNew?: boolean })
           </div>
 
           <OutputView run={run} />
+
+          {/* The endpoint that just produced this, with these values in it.
+              The REST API tab above shows the call in the abstract, before
+              anything has run; this is the one that returned what is on the
+              screen. The voice page has had it under its results all along and
+              the recorded page — where the endpoint is the entire point of
+              recording — did not. */}
+          <div className="mt-6">
+            <RunApiPanel run={run} automationId={automation.id} input={values} />
+          </div>
 
           <RegionPicker
             run={run}

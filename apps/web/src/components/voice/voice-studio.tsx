@@ -575,7 +575,18 @@ export function VoiceStudio() {
                 {/* Editable, because speech misheard is speech misheard. */}
                 <div className="mt-5 grid gap-3 sm:grid-cols-2">
                   {plan.automation.schema.fields
-                    .filter((f) => f.exposure !== 'constant')
+                    /* What the request is actually about.
+                       An advanced field earns a place here only when the
+                       request set it — "cheapest first" brings Sort by, saying
+                       nothing about sorting leaves it to the full form. The
+                       plan card is a confirmation of what was heard, and a
+                       column of empty controls nobody mentioned buries it. */
+                    .filter((f) => {
+                      if (f.exposure === 'constant') return false;
+                      if (f.exposure !== 'advanced') return true;
+                      const v = values[f.key];
+                      return v !== undefined && v !== null && v !== '' && v !== false;
+                    })
                     .map((f) => (
                       <label key={f.key} className="flex flex-col gap-1.5">
                         <span className="flex items-baseline gap-2 text-[12.5px] font-medium text-ink-700">

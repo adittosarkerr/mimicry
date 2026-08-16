@@ -185,7 +185,10 @@ export function repairHostnames(transcript: string, knownSites: string[]): strin
   /* Also considers the preceding word, because a two-part name is dictated with
      a gap in it: "walton bd dot com" arrives as three tokens. */
   return transcript.replace(
-    /\b(?:([a-z][a-z0-9-]{1,})\s+)?([a-z][a-z0-9-]{1,})(\s*(?:dot|\.)\s*(?:com|net|org|io|co\.uk|co|xyz|ai|app))\b/gi,
+    /* Country suffixes first, and longest first, or `daraz.com.bd` matches as
+       `daraz.com` and leaves `.bd` stranded in the sentence — which is exactly
+       what happened: the repair produced "daraz.com dot bd". */
+    /\b(?:([a-z][a-z0-9-]{1,})\s+)?([a-z][a-z0-9-]{1,})(\s*(?:dot|\.)\s*(?:com\.bd|com\.np|com\.mm|com\.pk|com\.au|co\.uk|co\.in|com|net|org|io|co|xyz|ai|app|bd|lk|pk))\b/gi,
     (whole, prev: string | undefined, spoken: string, suffix: string) => {
       const said = spoken.toLowerCase();
       const joined = prev ? `${prev.toLowerCase()}${said}` : said;
@@ -202,22 +205,34 @@ export function repairHostnames(transcript: string, knownSites: string[]): strin
           [said, false],
           ...(prev ? ([[joined, true]] as [string, boolean][]) : []),
         ] as [string, boolean][]) {
+          /* Same opening letter, always. A transcriber garbles the middle of a
+             word — "daraz" heard as "dharas" or "darajj" — and essentially
+             never the first sound. Requiring it is what makes the threshold
+             below safe to lower: without it, "walmart" starts competing with
+             "walton" the moment the bar drops. */
+          if (candidate[0] !== stem[0]) continue;
           const score = similarity(candidate, stem);
           if (!best || score > best.score) best = { host, score, usedPrev };
         }
       }
 
-      // Close enough to be a mishearing, far enough that an unrelated site is
-      // left alone. Anything below this passes through untouched.
-      if (!best || best.score < 0.72) return whole;
+      /* Close enough to be a mishearing, far enough that an unrelated site is
+         left alone. 0.72 was too strict for the ones that actually happen:
+         "dharas" and "darajj" for "daraz" both score 0.667 and both passed
+         straight through to a planner that had never heard of them. */
+      if (!best || best.score < 0.64) return whole;
 
-      /* Repair the name, keep the ending they said.
-         The suffix was being thrown away and replaced with whatever the known
-         site happened to use, which turns a request for one company's site
-         into a request for a different company's. Only the misheard part is
-         ours to correct. */
+      /* A name that had to be repaired takes the known host whole.
+         The spoken ending is kept only when the name arrived intact — that is
+         the case the rule was written for, where "fmovies.org" must not become
+         "fmovies.com" and hand someone a different operator's site. But a name
+         that was misheard is not evidence about anything: whoever said
+         "dharas.com" meant daraz.com.bd, and honouring the ".com" they did not
+         really say produces a host with no profile and no automation. */
+      const exact = named.some((n) => n.stem === said || (prev && n.stem === joined));
       const spokenTld = suffix.replace(/\s*(?:dot|\.)\s*/i, '').toLowerCase();
-      const repaired = `${best.host.split('.')[0]}.${spokenTld || best.host.split('.').slice(1).join('.')}`;
+      const knownTld = best.host.split('.').slice(1).join('.');
+      const repaired = `${best.host.split('.')[0]}.${exact && spokenTld ? spokenTld : knownTld}`;
       return best.usedPrev ? repaired : `${prev ? `${prev} ` : ''}${repaired}`;
     },
   );
